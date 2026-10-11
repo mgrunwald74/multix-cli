@@ -17,6 +17,7 @@ const documentationRoutes = [
   "commands/cloudflare",
   "commands/elevenlabs",
   "commands/replicate",
+  "commands/heygen",
   "commands/providers",
   "commands/media-and-documents",
   "reference/environment",
@@ -122,6 +123,7 @@ test("provider pages retain command caveats and asynchronous workflows", async (
     "byteplus",
     "cloudflare",
     "elevenlabs",
+    "heygen",
   ]) {
     assert.match(agentGuide, new RegExp(`/commands/${provider}/`));
     assert.match(vietnameseAgentGuide, new RegExp(`/vi/commands/${provider}/`));

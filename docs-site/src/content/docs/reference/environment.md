@@ -24,6 +24,7 @@ history and never commit them.
 | `FAL_KEY` | fal.ai |
 | `ATLASCLOUD_API_KEY` | Atlas Cloud |
 | `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
+| `HEYGEN_API_KEY` | HeyGen (API credits are billed separately from web plans) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -100,6 +101,9 @@ Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
 and `ATLASCLOUD_IMAGE_TO_3D_MODEL`. See [Atlas Cloud](/commands/atlascloud/)
 for the built-in defaults. `ATLASCLOUD_MAX_UPLOAD_MB` sets the size limit for
 local files uploaded to Atlas Cloud (default 200).
+
+`HEYGEN_BASE_URL` overrides the HeyGen API base (default
+`https://api.heygen.com`) for proxies and tests.
 
 Cloudflare accepts only the built-in Workers AI image and speech model IDs;
 `CLOUDFLARE_AI_IMAGE_MODEL` and `CLOUDFLARE_AI_TTS_MODEL` are therefore useful

@@ -87,6 +87,7 @@ export default defineConfig({
             { label: "fal.ai", slug: "commands/fal" },
             { label: "Atlas Cloud", slug: "commands/atlascloud" },
             { label: "Replicate", slug: "commands/replicate" },
+            { label: "HeyGen", slug: "commands/heygen" },
             {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },

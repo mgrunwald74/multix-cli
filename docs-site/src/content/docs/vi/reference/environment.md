@@ -23,6 +23,7 @@ bật). Không commit API key hoặc đưa key vào shell history.
 | `FAL_KEY` | fal.ai |
 | `ATLASCLOUD_API_KEY` | Atlas Cloud |
 | `REPLICATE_API_TOKEN` hoặc `REPLICATE_API_KEY` | Replicate (API trực tiếp) |
+| `HEYGEN_API_KEY` | HeyGen (credit API tính riêng với gói web) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -100,6 +101,9 @@ lệnh: `ATLASCLOUD_IMAGE_MODEL`, `ATLASCLOUD_IMAGE_EDIT_MODEL`,
 và `ATLASCLOUD_IMAGE_TO_3D_MODEL`. Xem [Atlas Cloud](/vi/commands/atlascloud/)
 để biết các model mặc định. `ATLASCLOUD_MAX_UPLOAD_MB` đặt giới hạn dung lượng
 cho file cục bộ upload lên Atlas Cloud (mặc định 200).
+
+`HEYGEN_BASE_URL` ghi đè API base của HeyGen (mặc định
+`https://api.heygen.com`) cho proxy và test.
 
 Cloudflare chỉ chấp nhận các model image và speech Workers AI có sẵn;
 `CLOUDFLARE_AI_IMAGE_MODEL` và `CLOUDFLARE_AI_TTS_MODEL` vì vậy chỉ dùng để

@@ -93,6 +93,12 @@ const PROVIDERS: ProviderEntry[] = [
     optional: true,
     link: "https://replicate.com/account/api-tokens",
   },
+  {
+    name: "HeyGen",
+    envPrimary: "HEYGEN_API_KEY",
+    optional: true,
+    link: "https://app.heygen.com/developers/api",
+  },
 ];
 
 /** Same trimmed primary→fallback resolution the providers use, so check never disagrees. */

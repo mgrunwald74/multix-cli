@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Veo video, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **fal.ai** (generic model runner, image, video via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
 
 ## Documentation
 
@@ -70,6 +70,8 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `FAL_BASE_URL` | No | Override fal queue base (default `https://queue.fal.run`) |
 | `FAL_IMAGE_MODEL` | No | Default fal image model (default `fal-ai/flux/schnell`) |
 | `FAL_VIDEO_MODEL` | No | Default fal text-to-video model (default `fal-ai/kling-video/v1.6/standard/text-to-video`) |
+| `HEYGEN_API_KEY` | For HeyGen | [HeyGen API settings](https://app.heygen.com/developers/api). API usage is billed separately from HeyGen web plans |
+| `HEYGEN_BASE_URL` | No | Override the HeyGen API base (default `https://api.heygen.com`; proxies/tests) |
 | `FAL_VIDEO_IMAGE_MODEL` | No | Default fal image-to-video model, used when `--image-url` is passed without `-m` (default `fal-ai/kling-video/v1.6/standard/image-to-video`) |
 | `ATLASCLOUD_API_KEY` | For Atlas Cloud | [Atlas Cloud](https://www.atlascloud.ai/console/api-keys) |
 | `ATLASCLOUD_BASE_URL` | No | Override Atlas Cloud media API base (default `https://api.atlascloud.ai/api/v1`) |
@@ -559,6 +561,47 @@ multix replicate cancel <prediction-id>
 - Every media URL in the output (string, list, or nested object) is downloaded as `replicate-<id8>-NN.<ext>` (`<id8>` = first 8 characters of the prediction id); text outputs are printed. Output URLs expire, so download promptly. If any download fails, the command exits non-zero and prints `multix replicate status <id> --download` to retry.
 - `replicate image` converts images to WebP by default; `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, an explicit `--output-format`, or a non-`.webp` `--output` extension keeps the provider format.
 - Local files (`--image`, `--file key=path`) up to 256 KB are inlined as data URIs; larger files (< 100 MB) are uploaded via the Replicate Files API.
+
+### `multix heygen`
+
+[HeyGen](https://www.heygen.com) v3 API (`X-Api-Key` auth, base `https://api.heygen.com`). Two ways to make an avatar video:
+
+- **Video Agent** (`video-agent`): prompt-to-video. Describe the video; the agent writes the script and chooses avatar, voice, scenes, and B-roll.
+- **Scripted avatar video** (`video`): you pick the avatar look and voice, and the avatar speaks your exact script (or lip-syncs `--audio`).
+
+```bash
+# Prompt-to-video (Video Agent); waits, then downloads MP4 + thumbnail
+multix heygen video-agent "45-second explainer for our note app, upbeat" [--avatar <look-id>] [--voice <voice-id>] [--style <style-id>] [--orientation landscape|portrait] [--file <ref>]...
+
+# Scripted avatar video
+multix heygen avatars [--type studio_avatar|digital_twin|photo_avatar] [--limit 50] [--cursor <token>]
+multix heygen voices [--language English] [--gender female]
+multix heygen video "Hi, I'm Anna." --avatar <look-id> [--voice <voice-id>] [--aspect-ratio 9:16] [--resolution 1080p] [--engine avatar_iv|avatar_v|avatar_iii] [--burn-captions] [--captions]
+multix heygen video --avatar <look-id> --audio ./voiceover.mp3
+
+# Translation (one job per language; all are downloaded), lipsync, TTS
+multix heygen languages
+multix heygen translate ./talk.mp4 --languages "Spanish, Chinese (Cantonese, Traditional)" [--mode speed|precision] [--output <dir>]
+multix heygen lipsync --video <ref> --audio <ref>
+multix heygen tts "Welcome to the show." --voice <voice-id> [--output hello.mp3]
+
+# HeyGen Video model (5-15 s cinematic clip, not an avatar), templates, raw v3 payloads
+multix heygen model-video "drone shot over a misty forest" [--duration 8] [--resolution 1080p]
+multix heygen template <template-id> --input @vars.json
+multix heygen run video --input @payload.json   # video-agent | video | video-translation | lipsync | model-video | speech
+
+# Resume / inspect any job (agent takes a session_id)
+multix heygen status <id> --type agent|video|translation|lipsync|model-video [--wait] [--download]
+multix heygen me
+```
+
+**Notes:**
+- API usage is billed separately from HeyGen web/app plans; `multix heygen me` shows the API balance. A 402 means the API account needs credits.
+- Media `<ref>` values accept `https://` URLs, `asset:<asset_id>`, or a local file. Local files upload via `POST /v3/assets` (max 32 MB).
+- Generation commands wait and download by default. Use `--async` to print IDs plus a resume command, `--no-download` to print the signed URL (included as `output_url` with `--json`), and `--wait-timeout` / `--poll-interval` to tune polling (default 30 min / 10 s, backing off to 30 s). `--burn-captions` downloads the captioned render and fails if HeyGen returns none.
+- Failed, cancelled, or input-blocked jobs exit non-zero with HeyGen's `failure_code`/message. When several jobs run, every success is still downloaded before the command exits non-zero. 429 `Retry-After` is honoured, and `Idempotency-Key` is sent only on endpoints that document it.
+- `--callback-url` webhooks are signed with HMAC-SHA256 of the raw body (hex, `signature` header). The npm package does not export a verifier; copy `src/providers/heygen/webhook.ts` or the Node snippet in the [HeyGen docs](https://multix.zuey.me/commands/heygen/#webhooks).
+- Digital-twin creation and voice cloning are out of scope. Full reference: [HeyGen commands](https://multix.zuey.me/commands/heygen/).
 
 ### `multix media`
 

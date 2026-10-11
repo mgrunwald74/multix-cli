@@ -28,6 +28,31 @@ describe("multix --help (smoke)", () => {
     expect(out).toContain("openai");
     expect(out).toContain("atlas");
     expect(out).toContain("replicate");
+    expect(out).toContain("heygen");
+  });
+
+  it("lists heygen subcommands", async () => {
+    const result = await execa("node", [CLI, "heygen", "--help"], { reject: false });
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout + result.stderr;
+    for (const sub of [
+      "video-agent",
+      "video",
+      "status",
+      "avatars",
+      "voices",
+      "styles",
+      "languages",
+      "me",
+      "translate",
+      "lipsync",
+      "tts",
+      "template",
+      "model-video",
+      "run",
+    ]) {
+      expect(out).toContain(sub);
+    }
   });
 
   it("lists replicate subcommands", async () => {
@@ -56,6 +81,16 @@ describe("multix --help (smoke)", () => {
     ]) {
       expect(out).toContain(sub);
     }
+  });
+
+  it("fails heygen commands without HEYGEN_API_KEY with a config error, not a stack trace", async () => {
+    const result = await execa("node", [CLI, "heygen", "me"], {
+      reject: false,
+      env: { HEYGEN_API_KEY: "", MULTIX_DISABLE_HOME_ENV: "1" },
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("HEYGEN_API_KEY is not set");
+    expect(result.stderr).not.toMatch(/\n\s+at /);
   });
 
   it("accepts --version as a replicate run option without printing the CLI version", async () => {
