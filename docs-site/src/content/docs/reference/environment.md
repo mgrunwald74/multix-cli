@@ -23,6 +23,7 @@ history and never commit them.
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 | `FAL_KEY` | fal.ai |
 | `ATLASCLOUD_API_KEY` | Atlas Cloud |
+| `REPLICATE_API_TOKEN` or `REPLICATE_API_KEY` | Replicate (direct API) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -85,7 +86,11 @@ settings include `IMAGE_GEN_MODEL`, `VIDEO_GEN_MODEL`, `MULTIMODAL_MODEL`,
 `BYTEPLUS_BASE_URL`, `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`,
 `BYTEPLUS_3D_MODEL`, `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL`, and
 `FAL_VIDEO_IMAGE_MODEL` (fal's image-to-video default, used when
-`multix fal video --image-url` is passed without `-m`).
+`multix fal video --image-url` is passed without `-m`). Replicate accepts
+`REPLICATE_BASE_URL` (API root for mocks or proxies), `REPLICATE_IMAGE_MODEL`
+(default `black-forest-labs/flux-schnell`), and `REPLICATE_VIDEO_MODEL`
+(default `prunaai/p-video`). Cloudflare AI Gateway video reads only
+`REPLICATE_API_TOKEN`.
 
 Atlas Cloud accepts `ATLASCLOUD_BASE_URL` (media API base, default
 `https://api.atlascloud.ai/api/v1`) and one default-model override per command:

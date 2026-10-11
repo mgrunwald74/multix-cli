@@ -21,6 +21,7 @@ const topLevelCommands = [
   "fal",
   "atlas",
   "atlascloud",
+  "replicate",
   "media",
   "doc",
 ];
@@ -44,6 +45,7 @@ const subcommands: Record<string, string[]> = {
     "status",
     "upload",
   ],
+  replicate: ["run", "image", "video", "status", "cancel"],
   media: ["optimize", "split", "batch"],
   doc: ["convert"],
 };

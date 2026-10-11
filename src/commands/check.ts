@@ -12,6 +12,7 @@ import {
   legacyClaudeEnvEnabled,
   legacyClaudeEnvFiles,
   redact,
+  resolveFirstKey,
   resolveKey,
 } from "../core/env-loader.js";
 import { createLogger } from "../core/logger.js";
@@ -85,21 +86,25 @@ const PROVIDERS: ProviderEntry[] = [
     optional: true,
     link: "https://www.atlascloud.ai/console/api-keys",
   },
+  {
+    name: "Replicate",
+    envPrimary: "REPLICATE_API_TOKEN",
+    envFallback: "REPLICATE_API_KEY",
+    optional: true,
+    link: "https://replicate.com/account/api-tokens",
+  },
 ];
 
-function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {
+/** Same trimmed primary→fallback resolution the providers use, so check never disagrees. */
+export function resolveProviderKey(p: ProviderEntry): { key?: string; envUsed?: string } {
   if (p.envPrimary === "GEMINI_API_KEY") {
     // Rotation pool: GEMINI_API_KEY first, then GEMINI_API_KEY_2, _3, …
     const first = listGeminiKeys()[0];
     return first ? { key: first.value, envUsed: first.name } : {};
   }
-  const primary = resolveKey(p.envPrimary);
-  if (primary) return { key: primary, envUsed: p.envPrimary };
-  if (p.envFallback) {
-    const fb = resolveKey(p.envFallback);
-    if (fb) return { key: fb, envUsed: p.envFallback };
-  }
-  return {};
+  const names = p.envFallback ? [p.envPrimary, p.envFallback] : [p.envPrimary];
+  const found = resolveFirstKey(...names);
+  return found ? { key: found.value, envUsed: found.envUsed } : {};
 }
 
 type CodexImageChecker = () => Promise<boolean>;

@@ -1,6 +1,6 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX), generate video (Gemini Veo, MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
 version: 0.11.0 # x-release-please-version
 ---
 
@@ -23,6 +23,7 @@ Activate this skill when the user asks to:
 - Optimize, resize, batch-convert, or split video/audio/image files
 - Run any fal.ai model (generic queue-API runner), or fal.ai's default image/video models
 - Run any Atlas Cloud model (image, image edit, video, TTS/STT, 3D) with schema-validated inputs and resumable async predictions
+- Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Update multix itself to the latest (or a given dist-tag) npm version
 
 ## Self-update
@@ -45,6 +46,7 @@ BYTEPLUS_API_KEY      # BytePlus / Volcengine ARK (Seedream/Seedance/Hyper3D)
 ELEVENLABS_API_KEY    # ElevenLabs (TTS, cloning, STT, music, dubbing)
 FAL_KEY                # fal.ai (generic queue-API model runner, image/video)
 ATLASCLOUD_API_KEY    # Atlas Cloud (any model: image, edit, video, audio, 3D)
+REPLICATE_API_TOKEN   # Replicate direct API (REPLICATE_API_KEY accepted as fallback)
 CLOUDFLARE_ACCOUNT_ID # Cloudflare Workers AI / AI Gateway account
 CLOUDFLARE_API_TOKEN  # Cloudflare Workers AI / AI Gateway token
 # Video additionally requires CLOUDFLARE_AI_GATEWAY_ID and REPLICATE_API_TOKEN.
@@ -82,6 +84,7 @@ multix check [--verbose]
 | Cloudflare | `multix cloudflare generate --prompt "<text>" [--steps 1-8] [--seed <n>]` | Workers AI FLUX.1 Schnell only |
 | fal.ai | `multix fal image "<text>" [-m <model>] [--image-size square_hd] [-n N] [--seed <n>]` | Default `fal-ai/flux/schnell`; also `multix fal run <model> --input <json\|@file>` for any fal model |
 | Atlas Cloud | `multix atlas image "<text>" [-m <model>] [--size <size>] [--aspect-ratio 1:1] [-n N] [--seed <n>]` | Default `black-forest-labs/flux-schnell`; flags are validated against the model's schema |
+| Replicate | `multix replicate image "<text>" [-m <owner/name>] [--aspect-ratio 16:9] [-n N] [--seed <n>]` | Default `black-forest-labs/flux-schnell`; also `multix replicate run <model> --input <json\|@file>` for any model |
 
 Aspect ratios (most providers): `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`.
 
@@ -153,6 +156,27 @@ multix atlas status "$id" --wait --download [--output <path>]
 ```
 
 `--ref` takes one value per flag; repeat it for several references. Local `--ref` and `--audio` files are uploaded first (`multix atlas upload <file>` prints only a temporary URL). Uploads accept only image, video and audio files up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`). `run --no-validate` skips the schema, so pass `--type` with it. Atlas Cloud has no cancel endpoint.
+
+## Replicate
+
+Direct Replicate API (`Authorization: Bearer $REPLICATE_API_TOKEN`, fallback `REPLICATE_API_KEY`), separate from the Cloudflare AI Gateway route. Official models (`owner/name`) run on the model endpoint; community models need `owner/name:version`, a bare version id, or `--version`. Commands wait with bounded polling by default and download every media output as `replicate-<id8>-NN.<ext>` (first 8 characters of the prediction id). A partial download failure exits non-zero with a `status <id> --download` retry command. `replicate image` converts to WebP unless `--image-format original`/`--no-webp`, an explicit `--output-format`, or a non-`.webp` `--output` is given.
+
+```bash
+# Generic runner (input is passed through unchanged; --file uploads local files into an input key)
+multix replicate run black-forest-labs/flux-schnell --input '{"prompt":"a cyberpunk cat"}'
+multix replicate run owner/model:<version-id> --input @payload.json [--file image=./photo.png]
+
+# Image (default black-forest-labs/flux-schnell) and video (default prunaai/p-video; --image for image-to-video)
+multix replicate image "a futuristic city" [-m <owner/name>] [--aspect-ratio 16:9] [-n 1] [--output-format png]
+multix replicate video "a cinematic establishing shot" [--image <path|url>] [--duration 5] [--input '{"draft":true}']
+
+# Long jobs: submit async, keep the id, resume or cancel later without re-running
+multix replicate video "a slow pan over mountains" --async
+multix replicate status <prediction-id> --wait --download
+multix replicate cancel <prediction-id>
+```
+
+Shared flags: `--async`, `--wait`, `--prefer-wait [seconds]` (sends `Prefer: wait=N`, still polls if unfinished), `--wait-timeout <ms>`, `--no-download` (print URLs), `--output <path|dir/>`. `failed`/`canceled`/`aborted` predictions exit non-zero. Local files up to 256 KB are inlined as data URIs; larger files (< 100 MB) go through the Replicate Files API.
 
 ## Image-to-image (edit existing image with a prompt)
 
@@ -350,7 +374,10 @@ Requires `cwebp` (libwebp: `brew install webp`, `apt install webp`) on `PATH`.
 | `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | Required for Cloudflare Workers AI image/speech and AI Gateway video |
 | `CLOUDFLARE_AI_GATEWAY_ID` | Optional for native Cloudflare image/speech; required for Cloudflare video |
 | `CLOUDFLARE_AI_GATEWAY_COLLECT_LOG_PAYLOAD` | Set `true` to explicitly opt in to AI Gateway request-payload collection; defaults to `false` |
-| `REPLICATE_API_TOKEN` | Required for Cloudflare AI Gateway video |
+| `REPLICATE_API_TOKEN` | Replicate direct API token (`multix replicate`); also required for Cloudflare AI Gateway video |
+| `REPLICATE_API_KEY` | Fallback for `REPLICATE_API_TOKEN` (direct `multix replicate` only) |
+| `REPLICATE_BASE_URL` | Override Replicate API root (default `https://api.replicate.com/v1`) |
+| `REPLICATE_IMAGE_MODEL` / `REPLICATE_VIDEO_MODEL` | Replicate default models (default `black-forest-labs/flux-schnell`, `prunaai/p-video`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` / `CLOUDFLARE_AI_TTS_MODEL` | Fixed-model settings: only `@cf/black-forest-labs/flux-1-schnell` and `@cf/myshell-ai/melotts` respectively are accepted |
 | `MULTIX_DISABLE_HOME_ENV` | `1` to skip every home-directory env file (`~/.multix/.env`, `~/.claude/...`) |
 | `MULTIX_LEGACY_CLAUDE_ENV` | `1` to also read legacy `.claude` env files (credential names only) |
@@ -397,6 +424,10 @@ multix fal run fal-ai/flux/schnell --input '{"prompt":"A sunset over mountains"}
 # Atlas Cloud
 multix atlas image "A sunset over mountains"
 multix atlas status "$(multix atlas video "Ocean waves" --async)" --wait --download
+
+# Replicate
+multix replicate image "A sunset over mountains"
+multix replicate video "A sunset timelapse" --async   # then: multix replicate status <id> --wait --download
 
 # Self-update
 multix update --check

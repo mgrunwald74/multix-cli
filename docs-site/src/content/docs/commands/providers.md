@@ -17,6 +17,7 @@ description: Choose a source-backed command reference for any multix AI provider
 | ElevenLabs | [Commands](/commands/elevenlabs/) | Voice, speech, audio, and dubbing | Dubbing has a job/status workflow. |
 | fal.ai | [Commands](/commands/fal/) | Any queue model, plus image/video convenience commands | Status/result use the model's app id (first two path segments), not the full model id. |
 | Atlas Cloud | [Commands](/commands/atlascloud/) | Any model: image, image edit, video, audio, and 3D | Inputs are validated against each model's schema; `--async` plus `status --wait --download` resumes a job. |
+| Replicate | [Commands](/commands/replicate/) | Any model via the direct API, plus image/video convenience commands | Community models need a version; resume or cancel jobs by prediction ID. |
 
 Use `multix <provider> --help` and the specific subcommand's `--help` before
 automating a workflow. Those commands own current options and defaults.

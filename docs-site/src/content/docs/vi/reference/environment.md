@@ -22,6 +22,7 @@ bật). Không commit API key hoặc đưa key vào shell history.
 | `ELEVENLABS_API_KEY` | ElevenLabs |
 | `FAL_KEY` | fal.ai |
 | `ATLASCLOUD_API_KEY` | Atlas Cloud |
+| `REPLICATE_API_TOKEN` hoặc `REPLICATE_API_KEY` | Replicate (API trực tiếp) |
 
 ```bash
 export GEMINI_API_KEY="your-key"
@@ -85,7 +86,11 @@ Chỉ đặt override khi cần thay default. Các biến gồm `IMAGE_GEN_MODEL
 `BYTEPLUS_IMAGE_MODEL`, `BYTEPLUS_VIDEO_MODEL`, `BYTEPLUS_3D_MODEL`,
 `FAL_BASE_URL`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` và
 `FAL_VIDEO_IMAGE_MODEL` (default image-to-video của fal, dùng khi truyền
-`multix fal video --image-url` mà không có `-m`).
+`multix fal video --image-url` mà không có `-m`). Replicate nhận
+`REPLICATE_BASE_URL` (API root cho mock hoặc proxy), `REPLICATE_IMAGE_MODEL`
+(mặc định `black-forest-labs/flux-schnell`) và `REPLICATE_VIDEO_MODEL`
+(mặc định `prunaai/p-video`). Video qua Cloudflare AI Gateway chỉ đọc
+`REPLICATE_API_TOKEN`.
 
 Atlas Cloud nhận `ATLASCLOUD_BASE_URL` (base của media API, mặc định
 `https://api.atlascloud.ai/api/v1`) và một biến ghi đè model mặc định cho mỗi

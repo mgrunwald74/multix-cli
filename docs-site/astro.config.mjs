@@ -86,6 +86,7 @@ export default defineConfig({
             { label: "ElevenLabs", slug: "commands/elevenlabs" },
             { label: "fal.ai", slug: "commands/fal" },
             { label: "Atlas Cloud", slug: "commands/atlascloud" },
+            { label: "Replicate", slug: "commands/replicate" },
             {
               label: "Provider directory",
               translations: { vi: "Danh mục provider" },
