@@ -7,7 +7,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { resolveKey } from "../../../core/env-loader.js";
 import { ValidationError } from "../../../core/errors.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
@@ -27,7 +26,7 @@ export function registerGenerateVideoCommand(parent: Command): void {
       "--reference-images <paths...>",
       "Reference images (first=opening frame, second=closing)",
     )
-    .option("--upload-timeout <ms>", "Upload timeout in ms", "120000")
+    .option("--upload-timeout <ms>", "Deprecated and ignored (images are sent inline)")
     .option("--output <path>", "Copy generated video to this path")
     .option("--no-thumb", "Skip downloading the thumbnail if the API returns one")
     .option("-v, --verbose", "Verbose logging")
@@ -38,15 +37,15 @@ export function registerGenerateVideoCommand(parent: Command): void {
         resolution: string;
         aspectRatio: string;
         referenceImages?: string[];
-        uploadTimeout: string;
+        uploadTimeout?: string;
         output?: string;
         thumb?: boolean;
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
-
-        const apiKey = resolveKey("GEMINI_API_KEY");
-        if (!apiKey) throw new ValidationError("GEMINI_API_KEY is not set");
+        if (opts.uploadTimeout !== undefined) {
+          logger.warn("--upload-timeout is deprecated and ignored (images are sent inline)");
+        }
 
         const model = opts.model ?? getDefaultModel("generate-video");
 
@@ -71,7 +70,6 @@ export function registerGenerateVideoCommand(parent: Command): void {
         const frames = veoFramesFromPaths(opts.referenceImages);
         const dest = path.join(getOutputDir(), `veo_generated_${Date.now()}.mp4`);
         const finalOp = await runVeo(
-          apiKey,
           model,
           {
             prompt: opts.prompt,

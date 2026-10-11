@@ -56,6 +56,7 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | Variable | Required | Purpose |
 |---|---|---|
 | `GEMINI_API_KEY` | For Gemini | [AI Studio](https://aistudio.google.com/apikey) |
+| `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … | No | Extra Gemini keys for quota rotation (see below) |
 | `OPENAI_API_KEY` | For OpenAI API | [OpenAI](https://platform.openai.com/api-keys) |
 | `OPENROUTER_API_KEY` | For OpenRouter | [OpenRouter](https://openrouter.ai/settings/keys) |
 | `MINIMAX_API_KEY` | For MiniMax | [MiniMax](https://platform.minimax.io/user-center/basic-information/interface-key) |
@@ -94,6 +95,10 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `VIDEO_GEN_MODEL` | No | Override Gemini video generation model |
 | `GEMINI_MODEL` / `MULTIMODAL_MODEL` | No | Override Gemini analyze/transcribe/extract model (doc convert uses `--model`; default `gemini-3.6-flash`) |
 | `GEMINI_TTS_MODEL` / `TTS_MODEL` | No | Override Gemini TTS model (default `gemini-3.8-flash-lite-tts`) |
+
+### Gemini key rotation
+
+Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffix; numbered keys alone are enough). `multix` tries `GEMINI_API_KEY` first, then the numbered keys in ascending order, skipping duplicates. When a key returns HTTP 429 (or 400/403 with `RESOURCE_EXHAUSTED`), it cools down for the server's `Retry-After`/`retryDelay` (default 60s) and the same request is retried with the next ready key; other errors are not rotated. A Files API upload is repeated on the new key if the following generate call is rate-limited. Veo rotates on submit only, so a rate limit while polling or downloading never starts a second billed job. `doc convert` stops its own retries on a rate limit. Cooldowns last for the current process only, and logs name the env var, never the key. `multix check` lists the keys in rotation and pings each one. Quotas are per Google Cloud project: keys from the same project share one quota, so rotation only helps across projects.
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`.
 

@@ -10,7 +10,7 @@ chạy, rồi `~/.multix/.env`. Không commit API key hoặc đưa key vào shel
 
 | Biến | Dùng cho |
 | --- | --- |
-| `GEMINI_API_KEY` | Gemini |
+| `GEMINI_API_KEY` (và tùy chọn `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, …) | Gemini |
 | `OPENAI_API_KEY` | OpenAI |
 | `OPENROUTER_API_KEY` | OpenRouter |
 | `MINIMAX_API_KEY` | MiniMax |
@@ -26,6 +26,30 @@ export GEMINI_API_KEY="your-key"
 export MULTIX_OUTPUT_DIR="./multix-output"
 multix check
 ```
+
+## Xoay vòng Gemini key
+
+Thêm key Gemini phụ bằng `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (hậu tố số
+bất kỳ). `multix` dùng `GEMINI_API_KEY` trước, sau đó các key đánh số theo thứ
+tự tăng dần; giá trị trùng lặp bị bỏ qua. Chỉ cần các key đánh số cũng đủ, không
+bắt buộc có `GEMINI_API_KEY`.
+
+- Key trả về HTTP 429, hoặc 400/403 kèm `RESOURCE_EXHAUSTED`, sẽ tạm nghỉ theo
+  `Retry-After` hoặc `retryDelay` của server, nếu không có thì 60 giây, và chính
+  request đó được thử lại với key sẵn sàng kế tiếp. Khi mọi key đều đang nghỉ,
+  chỉ key hồi phục sớm nhất được thử một lần. Các lỗi khác không xoay vòng.
+- Request nhiều bước giữ nguyên một key. Nếu lệnh generate sau khi upload qua
+  Files API bị giới hạn, key kế tiếp sẽ upload lại file, vì file đã upload thuộc
+  về key tạo ra nó.
+- Veo chỉ xoay vòng ở bước submit. Khi job đã được nhận, polling và download dùng
+  đúng key đó, nên giới hạn về sau không bao giờ tạo job thứ hai bị tính phí riêng.
+- `multix doc convert` dừng vòng thử lại của chính nó khi gặp giới hạn, vì xoay
+  vòng đã thử mọi key sẵn sàng.
+- Thời gian nghỉ chỉ tồn tại trong process hiện tại. Log chỉ ghi tên biến môi
+  trường, không bao giờ ghi giá trị key.
+- `multix check` liệt kê các key đang xoay vòng và ping từng key.
+- Quota Gemini tính theo từng Google Cloud project. Các key cùng project dùng
+  chung quota, nên xoay vòng chỉ có ích với key thuộc các project khác nhau.
 
 ## Ghi đè model và endpoint
 

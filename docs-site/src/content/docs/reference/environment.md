@@ -11,7 +11,7 @@ history and never commit them.
 
 | Variable | Used by |
 | --- | --- |
-| `GEMINI_API_KEY` | Gemini |
+| `GEMINI_API_KEY` (plus optional `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, …) | Gemini |
 | `OPENAI_API_KEY` | OpenAI |
 | `OPENROUTER_API_KEY` | OpenRouter |
 | `MINIMAX_API_KEY` | MiniMax |
@@ -27,6 +27,30 @@ export GEMINI_API_KEY="your-key"
 export MULTIX_OUTPUT_DIR="./multix-output"
 multix check
 ```
+
+## Gemini key rotation
+
+Add extra Gemini keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, and so on (any
+numeric suffix). `multix` uses `GEMINI_API_KEY` first, then the numbered keys in
+ascending order; duplicate values are ignored. Numbered keys work on their own,
+without `GEMINI_API_KEY`.
+
+- A key that returns HTTP 429, or 400/403 with `RESOURCE_EXHAUSTED`, cools down
+  for the server's `Retry-After` or `retryDelay`, else 60 seconds, and the same
+  request is retried with the next ready key. When every key is cooling, only
+  the key that recovers first is tried once. Other errors are not rotated.
+- Multi-step requests stay on one key. If the generate call that follows a Files
+  API upload is rate-limited, the next key uploads the file again, because an
+  uploaded file belongs to the key that created it.
+- Veo rotates only on submit. Once a job is accepted, polling and download use
+  that key, so a later rate limit never starts a second, separately billed job.
+- `multix doc convert` stops its own retries on a rate limit, because rotation
+  already tried every ready key.
+- Cooldowns last for the current process only. Logs name the env var, never the
+  key value.
+- `multix check` lists the keys in rotation and pings each one.
+- Gemini quotas apply per Google Cloud project. Keys from the same project share
+  one quota, so rotation only helps with keys from different projects.
 
 ## Model and endpoint overrides
 
