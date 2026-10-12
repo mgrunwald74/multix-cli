@@ -5,7 +5,7 @@
  * schema default, so length and size are bounded by sending every length
  * field explicitly and by checking what will actually be rendered, schema
  * defaults included. Resolution is checked on every field that names it and
- * against a resolution named in the model ID. Other
+ * against a resolution named in the model ID or a `template` preset. Other
  * price multipliers (audio, music and reasoning switches, output count, known
  * price tiers) are sent at their cheapest values. Shapes this code cannot
  * interpret fail closed.
@@ -57,6 +57,8 @@ const DIMENSION_FIELDS = ["width", "height"];
  */
 const RESOLUTION_FIELDS = ["output_resolution", "target_resolution"];
 const QUALITY_FIELD = "quality";
+/** A preset whose name can carry the output resolution (anime-enhance-4k). */
+const TEMPLATE_FIELD = "template";
 /** A resolution value: 720p, 1080P, 2k, 4K. */
 const RESOLUTION_VALUE_RE = /^\s*(\d{3,4}p|\d{1,2}k)\s*$/i;
 /**
@@ -504,13 +506,36 @@ export function assertVideoBodyWithinLimits(
     );
   }
 
-  // A resolution named in the ID is what the model renders and bills at, even
-  // when it also has a resolution input (kling-v3.0-4k/image-to-video defaults it to 1080P).
-  for (const match of model.matchAll(ID_RESOLUTION_RE)) {
-    const implied = (match[1] as string).toLowerCase();
-    if (!policy.allowedResolutions.includes(implied)) {
+  // A resolution named in the ID or in a preset template is what the model
+  // renders and bills at, even when it also has a resolution input
+  // (kling-v3.0-4k/image-to-video defaults it to 1080P; tencent/video/upscaler
+  // defaults `template` to anime-enhance-4k).
+  const assertNamedResolutions = (text: string, where: string) => {
+    for (const match of text.matchAll(ID_RESOLUTION_RE)) {
+      const implied = (match[1] as string).toLowerCase();
+      if (!policy.allowedResolutions.includes(implied)) {
+        throw new ValidationError(
+          `Model ${model} renders at ${implied} (named in ${where}); this server allows ${allowedList}, so use another model`,
+        );
+      }
+    }
+  };
+  assertNamedResolutions(model, "its ID");
+  const templateRaw = spec.properties[TEMPLATE_FIELD] as Prop | undefined;
+  if (templateRaw !== undefined) {
+    const where = `input "${TEMPLATE_FIELD}"`;
+    const template = effective(spec, model, body, TEMPLATE_FIELD);
+    if (typeof template === "string") {
+      assertNamedResolutions(template, where);
+    } else if (template === undefined) {
+      // No default: the API picks one of the presets, so every preset must be allowed.
+      const presets = unwrap(templateRaw)?.enum;
+      for (const preset of Array.isArray(presets) ? presets : []) {
+        if (typeof preset === "string") assertNamedResolutions(preset, where);
+      }
+    } else {
       throw new ValidationError(
-        `Model ${model} renders at ${implied} (named in its ID); this server allows ${allowedList}, so use another model`,
+        `Model ${model}: input "${TEMPLATE_FIELD}" has a schema this server cannot check; use another model`,
       );
     }
   }
