@@ -84,6 +84,24 @@ export async function runCodexImageGeneration(opts: {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "multix-codex-image-"));
+  try {
+    return await runInTempDir(tmp, opts, runner, dest);
+  } finally {
+    // Removal never throws: a leftover temp dir must not hide the image or Codex's error.
+    try {
+      fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+      // Best effort (e.g. antivirus holding a file on Windows); the OS temp dir is cleaned eventually.
+    }
+  }
+}
+
+async function runInTempDir(
+  tmp: string,
+  opts: { prompt: string; refs?: string[] },
+  runner: ProcessRunner,
+  dest: string,
+): Promise<{ path: string }> {
   const schema = path.join(tmp, "schema.json");
   const result = path.join(tmp, "result.json");
   fs.writeFileSync(
