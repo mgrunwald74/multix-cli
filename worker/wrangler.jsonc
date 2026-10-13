@@ -42,6 +42,33 @@
     // Per IP on sign-in, authorization, token, registration and dashboard writes.
     { "name": "AUTH_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
   ],
+  // multix_run: one container per job, owned by the MultixJobContainer Durable Object
+  // (worker/src/jobs/multix-job-container.ts). Needs the Workers Paid plan, and Docker
+  // running locally at `wrangler deploy` (it builds ./container/Dockerfile with the
+  // repository root as build context).
+  "containers": [
+    {
+      "class_name": "MultixJobContainer",
+      "image": "./container/Dockerfile",
+      "image_build_context": "..",
+      "instance_type": "basic",
+      // Also the most jobs that can run at once across all accounts.
+      "max_instances": 10
+    }
+  ],
+  // MULTIX_JOB_QUOTA: one small Durable Object per account holding its active job slots
+  // (worker/src/jobs/account-job-quota.ts), so the per-account cap is strongly consistent.
+  "durable_objects": {
+    "bindings": [
+      { "name": "MULTIX_JOBS", "class_name": "MultixJobContainer" },
+      { "name": "MULTIX_JOB_QUOTA", "class_name": "AccountJobQuota" }
+    ]
+  },
+  // Declarative Durable Object config (wrangler 4.149+); replaces `migrations`.
+  "exports": {
+    "MultixJobContainer": { "type": "durable-object", "storage": "sqlite" },
+    "AccountJobQuota": { "type": "durable-object", "storage": "sqlite" }
+  },
   "vars": {
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
     "MULTIX_MCP_MAX_OUTPUTS": "4",

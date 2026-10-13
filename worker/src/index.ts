@@ -11,8 +11,9 @@
  *   *    /dashboard[/…]                             account dashboard (provider keys, clients)
  *
  * Each MCP request runs with the provider keys of the account that approved
- * the client, decrypted for that request only. The Worker never spawns the
- * CLI and never touches a file system.
+ * the client, decrypted for that request only. The Worker itself never spawns
+ * the CLI and never touches a file system: `multix_run` jobs run in a
+ * per-job container owned by the MultixJobContainer Durable Object.
  */
 
 import {
@@ -25,6 +26,9 @@ import { isAllowed } from "./accounts/allowlist.js";
 import { type AppDeps, publicOrigin, resolveAppContext } from "./app-context.js";
 import { type WorkerEnv, serverSettings } from "./config.js";
 import { json, text } from "./http-responses.js";
+import { durableJobQuota } from "./jobs/account-job-quota.js";
+import type { JobToolsContext } from "./jobs/job-runner.js";
+import { JobStore, durableJobBackend } from "./jobs/job-store.js";
 import { handleMcpRequest } from "./mcp-api-handler.js";
 import { logEvent } from "./redaction.js";
 import { handleDashboard } from "./routes/dashboard-routes.js";
@@ -75,8 +79,21 @@ async function handleAuthenticatedMcp(
     const { success } = await env.MCP_RATE_LIMITER.limit({ key: account.id });
     if (!success) return text(429, "Too Many Requests", { "retry-after": "60" });
   }
-  const toolEnv = toolEnvFor(serverSettings(env), await app.accounts.providerKeys(account.id));
-  return handleMcpRequest(request, toolEnv, { fetch: deps.fetch });
+  const keys = await app.accounts.providerKeys(account.id);
+  const toolEnv = toolEnvFor(serverSettings(env), keys);
+  // The CLI runner needs both Durable Objects: the per-job container and the per-account quota.
+  const jobs: JobToolsContext | undefined =
+    env.MULTIX_JOBS && env.MULTIX_JOB_QUOTA
+      ? {
+          userId: account.id,
+          keys,
+          store: new JobStore(env.ACCOUNTS_KV),
+          backend: deps.jobBackend ?? durableJobBackend(env.MULTIX_JOBS),
+          quota: durableJobQuota(env.MULTIX_JOB_QUOTA),
+          r2Settings: () => app.accounts.r2Settings(account.id),
+        }
+      : undefined;
+  return handleMcpRequest(request, toolEnv, { fetch: deps.fetch, jobs });
 }
 
 /** Everything that is not the protected /mcp resource or a library-owned OAuth endpoint. */
@@ -169,5 +186,8 @@ export function createWorker(deps: AppDeps = {}): ExportedHandler<WorkerEnv> {
     },
   };
 }
+
+export { AccountJobQuota } from "./jobs/account-job-quota.js";
+export { MultixJobContainer } from "./jobs/multix-job-container.js";
 
 export default createWorker();
