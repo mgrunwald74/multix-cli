@@ -13,6 +13,7 @@
  * stored state instead of starting a new container to ask.
  */
 
+import { logEvent } from "../redaction.js";
 import {
   JOB_GIVE_UP_MS,
   type JobResult,
@@ -22,6 +23,10 @@ import {
   SERVER_AT_CAPACITY_ERROR,
   isTerminal,
 } from "./job-protocol.js";
+
+/** How many times a failed slot release is tried in total, and the base retry delay. */
+export const SLOT_RELEASE_ATTEMPTS = 5;
+export const SLOT_RELEASE_RETRY_SECONDS = 30;
 
 export interface JobContainerPort {
   load(): Promise<JobView | undefined>;
@@ -36,6 +41,8 @@ export interface JobContainerPort {
   schedulePoll(seconds: number): Promise<void>;
   /** Give back the account's job slot (idempotent). */
   releaseSlot(): Promise<void>;
+  /** Run `releaseSlot(attempt)` on this controller again after `seconds`. */
+  scheduleSlotRelease(attempt: number, seconds: number): Promise<void>;
   now(): number;
 }
 
@@ -164,6 +171,30 @@ export class JobController {
     return view;
   }
 
+  /**
+   * Give back the job's account and server slots. A failed release is retried
+   * a few times with a growing delay: a slot left taken would otherwise count
+   * against the server-wide cap for every account until its lease expires.
+   */
+  async releaseSlot(attempt = 1): Promise<void> {
+    try {
+      await this.port.releaseSlot();
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "unknown";
+      if (attempt >= SLOT_RELEASE_ATTEMPTS) {
+        // The slot's lease expires on its own; log it so "server at capacity" errors can be traced.
+        logEvent("error", "job_slot_release_gave_up", { attempt, error: name });
+        return;
+      }
+      logEvent("warn", "job_slot_release_failed", { attempt, error: name });
+      try {
+        await this.port.scheduleSlotRelease(attempt + 1, SLOT_RELEASE_RETRY_SECONDS * attempt);
+      } catch {
+        logEvent("error", "job_slot_release_unscheduled", { attempt });
+      }
+    }
+  }
+
   private async finish(
     view: JobView,
     status: JobTerminalStatus,
@@ -174,11 +205,7 @@ export class JobController {
     if (result) done.result = result;
     if (error) done.error = error;
     await this.port.save(done);
-    try {
-      await this.port.releaseSlot();
-    } catch {
-      // The slot's lease expires on its own.
-    }
+    await this.releaseSlot();
     try {
       await this.port.destroyContainer();
     } catch {
