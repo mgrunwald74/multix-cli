@@ -29,7 +29,7 @@ permissions:
 
 # Never run two deploys at once; a newer push supersedes a queued one. Runs
 # from other refs get their own group so they cannot cancel a queued main
-# deploy (they fail at "Require main" anyway).
+# deploy (the production environment rejects them anyway).
 concurrency:
   group: ${{ github.ref == 'refs/heads/main' && 'deploy-mcp' || format('deploy-mcp-{0}', github.run_id) }}
   cancel-in-progress: false
@@ -38,6 +38,9 @@ jobs:
   deploy:
     name: Deploy to Cloudflare (multix.zuey.me/mcp)
     runs-on: ubuntu-latest
+    # The Cloudflare secrets live in the production environment, which only
+    # main may use; runs from other refs get no token.
+    environment: production
     timeout-minutes: 60
 
     steps:
