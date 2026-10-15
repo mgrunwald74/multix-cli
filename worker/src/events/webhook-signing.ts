@@ -66,3 +66,44 @@ export async function verifyWebhook(
   const expected = await signWebhook(secret, headers.id, timestamp, body);
   return headers.signature.split(" ").some((candidate) => constantTimeEqual(candidate, expected));
 }
+
+/** MCP Events subscribers choose their secret; it must decode to this many bytes. */
+const MIN_CLIENT_SECRET_BYTES = 24;
+const MAX_CLIENT_SECRET_BYTES = 64;
+/** Longest accepted client secret: prefix plus base64 of 64 bytes, with some slack. */
+export const MAX_SECRET_CHARS = 128;
+
+/** Whether a client-chosen secret is `whsec_` + canonical base64 of 24-64 bytes. */
+export function isValidSecret(secret: string): boolean {
+  if (secret.length > MAX_SECRET_CHARS || !secret.startsWith(SECRET_PREFIX)) return false;
+  const encoded = secret.slice(SECRET_PREFIX.length);
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) return false;
+  try {
+    const bytes = base64ToBytes(encoded).byteLength;
+    return bytes >= MIN_CLIENT_SECRET_BYTES && bytes <= MAX_CLIENT_SECRET_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The headers of an MCP Events request (verification or delivery). Several
+ * secrets (a rotation window) give space-separated signatures; receivers
+ * accept any one of them.
+ */
+export async function webhookHeaders(
+  secrets: string[],
+  id: string,
+  timestamp: number,
+  body: string,
+  subscriptionId: string,
+): Promise<Record<string, string>> {
+  const signatures = await Promise.all(secrets.map((s) => signWebhook(s, id, timestamp, body)));
+  return {
+    "content-type": "application/json",
+    "webhook-id": id,
+    "webhook-timestamp": String(timestamp),
+    "webhook-signature": signatures.join(" "),
+    "x-mcp-subscription-id": subscriptionId,
+  };
+}

@@ -17,7 +17,13 @@ import { isProviderSecretName, isValidSecretValue } from "../accounts/account-st
 import type { Account } from "../accounts/account-store.js";
 import { API_KEY_NAME_RE, ApiKeyStore, TooManyApiKeysError } from "../accounts/api-key-store.js";
 import { r2Prefix } from "../accounts/r2-settings.js";
-import { type AppContext, oauthHelpers, sameOriginPost, signedInSession } from "../app-context.js";
+import {
+  type AppContext,
+  type AppDeps,
+  oauthHelpers,
+  sameOriginPost,
+  signedInSession,
+} from "../app-context.js";
 import { SESSION_COOKIE, clearCookie, csrfToken, csrfValid } from "../auth/signed-cookies.js";
 import { html, redirect, text } from "../http-responses.js";
 import type { NewApiKey } from "../pages/api-keys-card.js";
@@ -49,6 +55,30 @@ const NOTICES: Record<string, Notice> = {
   },
   ...R2_NOTICES,
 };
+
+/** The parts of an OAuth grant summary the revoke needs. */
+interface Grant {
+  id: string;
+  clientId: string;
+}
+
+/**
+ * A disconnected client's MCP Events subscriptions go with it, unless the
+ * account keeps another grant for the same client. Runs before the grant is
+ * revoked: if it fails, the connection is still listed and can be retried.
+ */
+async function removeClientSubscriptions(
+  ctx: AppContext,
+  deps: AppDeps,
+  userId: string,
+  grants: Grant[],
+  revoked: Grant,
+): Promise<number> {
+  const events = deps.events ?? ctx.env.MULTIX_EVENTS;
+  if (!events) return 0;
+  if (grants.some((g) => g.clientId === revoked.clientId && g.id !== revoked.id)) return 0;
+  return events.getByName(userId).removeByClient(revoked.clientId, `dashboard:${userId}`);
+}
 
 async function connectedClients(ctx: AppContext, account: Account): Promise<ConnectedClient[]> {
   const oauth = oauthHelpers(ctx.env);
@@ -99,7 +129,12 @@ async function showDashboard(
   );
 }
 
-async function handlePost(ctx: AppContext, request: Request, pathname: string): Promise<Response> {
+async function handlePost(
+  ctx: AppContext,
+  deps: AppDeps,
+  request: Request,
+  pathname: string,
+): Promise<Response> {
   if (!sameOriginPost(ctx, request)) return text(403, "Forbidden");
   const signedIn = await signedInSession(ctx, request);
   if (!signedIn) return redirect("/dashboard");
@@ -158,16 +193,26 @@ async function handlePost(ctx: AppContext, request: Request, pathname: string): 
   if (pathname === "/dashboard/connections/revoke") {
     const grantId = String(form.get("grant_id") ?? "");
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(grantId)) return text(400, "Invalid connection");
+    const oauth = oauthHelpers(ctx.env);
+    const grants = (await oauth.listUserGrants(account.id)).items;
+    const grant = grants.find((g) => g.id === grantId);
+    const removed = grant
+      ? await removeClientSubscriptions(ctx, deps, account.id, grants, grant)
+      : 0;
     // revokeGrant is scoped to the account id, so another user's grant id does nothing.
-    await oauthHelpers(ctx.env).revokeGrant(grantId, account.id);
-    logEvent("info", "mcp_client_disconnected", { user: account.id });
+    await oauth.revokeGrant(grantId, account.id);
+    logEvent("info", "mcp_client_disconnected", { user: account.id, subscriptions: removed });
     return redirect("/dashboard?notice=disconnected");
   }
 
   return text(404, "Not Found");
 }
 
-export async function handleDashboard(ctx: AppContext, request: Request): Promise<Response> {
+export async function handleDashboard(
+  ctx: AppContext,
+  request: Request,
+  deps: AppDeps = {},
+): Promise<Response> {
   const url = new URL(request.url);
   const { pathname } = url;
   if (request.method === "GET" || request.method === "HEAD") {
@@ -177,6 +222,6 @@ export async function handleDashboard(ctx: AppContext, request: Request): Promis
     }
     return text(404, "Not Found");
   }
-  if (request.method === "POST") return handlePost(ctx, request, pathname);
+  if (request.method === "POST") return handlePost(ctx, deps, request, pathname);
   return text(405, "Method Not Allowed", { allow: "GET, POST" });
 }

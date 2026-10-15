@@ -13,6 +13,9 @@ import {
   type DeadLetter,
   EventHub,
   type HubStorage,
+  type McpSubscriptionInput,
+  type McpSubscriptionState,
+  type McpUpsertResult,
   type SubscribeResult,
   type SubscriptionInput,
   type SubscriptionView,
@@ -31,6 +34,22 @@ export class AccountEvents extends DurableObject {
 
   subscribe(input: SubscriptionInput, actor: string): Promise<SubscribeResult> {
     return this.hub.subscribe(input, actor);
+  }
+
+  mcpSubscriptionState(
+    id: string,
+    callbackUrl: string,
+    secret: string,
+  ): Promise<McpSubscriptionState> {
+    return this.hub.mcpSubscriptionState(id, callbackUrl, secret);
+  }
+
+  upsertMcpSubscription(input: McpSubscriptionInput, actor: string): Promise<McpUpsertResult> {
+    return this.hub.upsertMcpSubscription(input, actor);
+  }
+
+  removeByClient(clientId: string, actor: string): Promise<number> {
+    return this.hub.removeByClient(clientId, actor);
   }
 
   listSubscriptions(): Promise<SubscriptionView[]> {
@@ -62,6 +81,13 @@ export class AccountEvents extends DurableObject {
 export interface AccountEventsStub {
   publish(events: MultixEvent[]): Promise<{ accepted: number; duplicates: number }>;
   subscribe(input: SubscriptionInput, actor: string): Promise<SubscribeResult>;
+  mcpSubscriptionState(
+    id: string,
+    callbackUrl: string,
+    secret: string,
+  ): Promise<McpSubscriptionState>;
+  upsertMcpSubscription(input: McpSubscriptionInput, actor: string): Promise<McpUpsertResult>;
+  removeByClient(clientId: string, actor: string): Promise<number>;
   listSubscriptions(): Promise<SubscriptionView[]>;
   getSubscription(id: string): Promise<SubscriptionView | null>;
   unsubscribe(id: string, actor: string): Promise<boolean>;

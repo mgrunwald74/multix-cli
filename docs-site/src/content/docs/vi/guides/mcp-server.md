@@ -217,8 +217,9 @@ Cloudflare.
    theo từng tài khoản và trên toàn server, và phải đi cùng `MULTIX_JOBS`.
    Binding `MULTIX_EVENTS` (class `AccountEvents`) giữ
    [subscription webhook](/vi/guides/rest-api/#webhook-sự-kiện-job) và các lần
-   gửi của từng tài khoản; thiếu binding này, các route `/api/v1/events` trả về
-   `503`.
+   gửi của từng tài khoản, tạo qua REST API lẫn
+   [MCP Events](#mcp-events-giao-thức-2026-07-28); thiếu binding này, các route
+   `/api/v1/events` trả về `503` và `server/discover` không cung cấp events.
 4. **Đặt secret** và triển khai:
 
    ```bash
@@ -297,6 +298,76 @@ Luồng thường gặp, ví dụ tạo video: `multix_catalog` → `multix_cata
 group (như `replicate`) → `multix_run` → gọi lại `multix_job_status` mỗi
 10–30 giây đến khi `status` là `succeeded`, `failed`, `timed_out` hoặc
 `canceled` → đọc `outputs`.
+
+## MCP Events (giao thức 2026-07-28)
+
+Server hỗ trợ hai phiên bản giao thức MCP trên cùng endpoint `/mcp`:
+
+- **Client đời 2025** (handshake `initialize`, mọi phiên bản giao thức 2025)
+  vẫn nhận các tool y như trước. Không có gì thay đổi với các client này.
+- **Client 2026-07-28** thương lượng qua `server/discover` và gửi phiên bản
+  giao thức trong mỗi request. `server/discover` liệt kê `2026-07-28` và, khi
+  Worker có binding `MULTIX_EVENTS`, capability `events`, để
+  client đăng ký
+  [MCP Events](https://developers.openai.com/plugins/build/mcp-events) bằng
+  `events/list`, `events/subscribe` và `events/unsubscribe`.
+
+| Sự kiện | Khi nào |
+|---|---|
+| `multix.job.completed` | Một job `multix_run` bạn khởi chạy đã thành công. |
+| `multix.job.failed` | Job thất bại. |
+| `multix.job.canceled` | Job bị hủy. |
+| `multix.job.timed_out` | Job hết thời gian. |
+| `multix.asset.ready` | Một file output của job đã được lưu vào bucket R2 của bạn. |
+
+Mọi sự kiện nhận một tham số tùy chọn, `job_id`, để chỉ theo dõi một job bạn
+sở hữu; bỏ trống thì subscription áp dụng cho mọi job của bạn. `events/list`
+trả về `payloadSchema` của từng sự kiện: cùng phần `data` với
+[webhook REST](/vi/guides/rest-api/#webhook-sự-kiện-job) (id, trạng thái cuối,
+lệnh, provider, thời điểm, exit code, tên và kích thước file output), không bao
+giờ chứa key, prompt, log hay URL đã ký.
+
+Mỗi lần gửi là một `POST` với body MCP Events
+`{ "eventId", "name", "timestamp", "data", "cursor": null }`, các header
+`webhook-id` (bằng `eventId`), `webhook-timestamp`, `webhook-signature` và
+`X-MCP-Subscription-Id`. Lần gửi thất bại được thử lại với backoff rồi chuyển
+vào dead letter, giống subscription REST; hãy khử trùng lặp theo `eventId`.
+
+Subscription chỉ dùng kiểu gửi **webhook**:
+
+- Callback phải là `https://` ở cổng mặc định với host name công khai, và mọi
+  địa chỉ mà tên đó phân giải ra phải là địa chỉ công khai. IP literal,
+  credential trong URL, tên kiểu `localhost` và địa chỉ private, loopback,
+  link-local, CGNAT, ULA bị từ chối với `-32602`, trước khi gửi bất cứ thứ gì.
+- Client cung cấp secret `whsec_` (base64 của 24–64 byte). Trước khi chấp nhận
+  subscription, server POST một thông điệp đã ký
+  `{ "type": "verification", "challenge": … }` (header
+  [Standard Webhooks](https://www.standardwebhooks.com)) và chờ phản hồi 2xx
+  trả lại đúng challenge trong 10 giây. Redirect không được đi theo. Nếu thất
+  bại, server trả `-32015` kèm `data.reason` (`challenge_failed`, `timeout`,
+  `connection_refused`, `http_4xx` hoặc `http_5xx`; host callback
+  không phân giải được cũng báo `connection_refused`) và không lưu gì. Gia hạn
+  một subscription còn hiệu lực với cùng callback và secret thì không xác minh
+  lại.
+- Đăng ký lại với cùng sự kiện, tham số và callback sẽ gia hạn subscription
+  hiện có (cùng `id`). Khi đổi secret, server vẫn ký thêm bằng secret cũ trong
+  một giờ. Thời hạn mặc định 24 giờ, được giới hạn trong khoảng 5 phút đến 7
+  ngày; `ttlMs: null` nhận 7 ngày, không bao giờ vô hạn. Hãy gia hạn trước
+  `refreshBefore`.
+- Subscription MCP và REST dùng chung một kho cho mỗi tài khoản (Durable Object
+  `AccountEvents`) và chung giới hạn 10 subscription đang hoạt động, nên không
+  tài khoản nào đọc, gia hạn hay xóa được subscription của tài khoản khác.
+  Chúng cũng hiện trong `GET /api/v1/events/subscriptions`, có
+  `"source": "mcp"` và `job_id` khi chỉ theo dõi một job. Ngắt kết nối một
+  client trong dashboard sẽ xóa các subscription client đó đã tạo hoặc gia hạn
+  gần nhất, và trong 10 phút sau đó từ chối `events/subscribe` của client này
+  bằng `-32600`, để một yêu cầu đang xử lý dở không tạo lại được subscription.
+  Khi gia hạn mà subscription đã bị vô hiệu hóa hoặc hết hạn, server xác minh
+  lại callback. Sự kiện cũ không được phát lại: `cursor` từ subscription trước
+  sẽ nhận `truncated: true`.
+
+`subscriptions/listen` không được hỗ trợ (danh sách tool cố định theo mỗi lần
+triển khai).
 
 ## Cấu hình
 
@@ -399,8 +470,16 @@ chung bộ đếm.
   và log chỉ ghi job ID và trạng thái. Bản ghi
   `job:<id>` trong `ACCOUNTS_KV` chứa chủ sở hữu, lệnh và thời điểm bắt đầu,
   không bao giờ chứa key.
+- **Callback sự kiện:** khi đăng ký, server từ chối callback không công khai
+  theo tên và theo mọi địa chỉ phân giải được (DNS over HTTPS); request tới
+  callback không bao giờ đi theo redirect, và chỉ loại lỗi xác minh được trả
+  về hoặc ghi log. Host bị trỏ sang địa chỉ private sau bước kiểm tra (DNS
+  rebinding) không bị phát hiện lúc đăng ký; việc kiểm tra lại địa chỉ trước
+  mỗi lần gửi được theo dõi ở
+  [#226](https://github.com/mrgoonie/multix-cli/issues/226).
 - **MCP stateless:** không có MCP session. Mỗi request tạo một server mới với
-  key của caller. Trạng thái OAuth và tài khoản nằm trong KV.
+  key của caller. Trạng thái OAuth và tài khoản nằm trong KV; subscription sự
+  kiện nằm trong một Durable Object riêng cho từng tài khoản.
 
 Trong CI, bundle Worker được kiểm tra để bảo đảm không chứa module `node:*`,
 không import module có sẵn của Node theo tên trần (`fs`, `child_process`,
