@@ -73,7 +73,7 @@ from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
 commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
 and actual cost, variance; unknown stays `null`, never $0). Priced so
 far: `gemini generate-speech`, `elevenlabs tts`, `openrouter tts` and
-`openrouter transcribe` (per second of a local audio file; exact for WAV);
+`openrouter transcribe` (per second of a local audio file; exact for PCM WAV);
 `--max-cost` refuses anything it cannot price. With `--json`, exit codes are `2` usage or
 input (including a refused `--max-cost`), `3` key or setup, `4` temporary
 (retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),

@@ -5,7 +5,8 @@
  * measured of the audio file) and prices them with the catalog. The result is a
  * range with its provenance; `upper_bound` says whether the high end is a
  * proven ceiling (billed units are known up front) or only an estimate (the
- * provider bills output it has not produced yet, e.g. seconds of audio).
+ * provider bills output it has not produced yet, e.g. seconds of audio, or
+ * input it cannot measure, e.g. a compressed audio file).
  */
 
 import { type PriceMeter, type ResolvedRate, priceOf, resolveRate } from "./pricing-catalog.js";
@@ -15,6 +16,8 @@ export interface TextUnits {
   characters: number;
   /** Code points after NFC: Vietnamese typed as NFD has more code points than NFC. */
   nfc_characters: number;
+  /** UTF-16 code units (JavaScript string length): an emoji is two. */
+  utf16_units: number;
   utf8_bytes: number;
 }
 
@@ -81,18 +84,24 @@ const CHARS_PER_SECOND = { fast: 25, typical: 14, slow: 6 };
 const PROMPT_OVERHEAD_TOKENS = 64;
 /**
  * Bitrate bounds (bits per second) for audio whose duration is not known:
- * 6 kbps is the floor of speech codecs in practice (Opus voice), so the
- * longest plausible duration; 64 kbps is typical speech mp3/m4a; 320 kbps
+ * 4 kbps is below the lowest common speech codecs (AMR-NB 4.75, Opus 6), so
+ * the longest plausible duration; 64 kbps is typical speech mp3/m4a; 320 kbps
  * the top of lossy formats.
  */
-const AUDIO_BITRATE = { floor: 6_000, typical: 64_000, ceiling: 320_000 };
+const AUDIO_BITRATE = { floor: 4_000, typical: 64_000, ceiling: 320_000 };
 
 const encoder = new TextEncoder();
+
+/** The caller measured the audio's exact length (a finite, non-negative number). */
+function exactSeconds(audio: AudioInput | undefined): boolean {
+  return audio?.seconds !== undefined && Number.isFinite(audio.seconds) && audio.seconds >= 0;
+}
 
 export function countText(text: string): TextUnits {
   return {
     characters: [...text].length,
     nfc_characters: [...text.normalize("NFC")].length,
+    utf16_units: text.length,
     utf8_bytes: encoder.encode(text).length,
   };
 }
@@ -101,6 +110,7 @@ function addUnits(a: TextUnits, b: TextUnits): TextUnits {
   return {
     characters: a.characters + b.characters,
     nfc_characters: a.nfc_characters + b.nfc_characters,
+    utf16_units: a.utf16_units + b.utf16_units,
     utf8_bytes: a.utf8_bytes + b.utf8_bytes,
   };
 }
@@ -146,9 +156,17 @@ function meterRanges(
 ): CostEstimate["units"] | undefined {
   const units: CostEstimate["units"] = {};
   if (meters.has("characters")) {
-    units.characters = { low: text.characters, expected: text.characters, high: all.characters };
+    // Some providers count UTF-16 units (an emoji is two): the ceiling takes the larger count.
+    units.characters = {
+      low: text.characters,
+      expected: text.characters,
+      high: Math.max(all.characters, all.utf16_units),
+    };
     if (all.characters > text.characters) {
       assumptions.push("High end also bills the context/style text sent with the request.");
+    }
+    if (all.utf16_units > all.characters) {
+      assumptions.push("High end counts characters outside the BMP (emoji) as two.");
     }
   }
   if (meters.has("utf8_bytes")) {
@@ -183,8 +201,8 @@ function meterRanges(
     );
   }
   if (meters.has("input_audio_seconds")) {
-    if (audio?.seconds !== undefined && audio.seconds >= 0) {
-      const billed = Math.max(1, Math.ceil(audio.seconds));
+    if (exactSeconds(audio)) {
+      const billed = Math.max(1, Math.ceil(audio?.seconds as number));
       units.input_audio_seconds = { low: billed, expected: billed, high: billed };
       assumptions.push(
         "Audio length read from the file header; billed per second of audio, rounded up.",
@@ -241,7 +259,7 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
   const proven =
     !meters.has("output_audio_tokens") &&
     !meters.has("input_text_tokens") &&
-    (!meters.has("input_audio_seconds") || req.audio?.seconds !== undefined);
+    (!meters.has("input_audio_seconds") || exactSeconds(req.audio));
   return {
     status: "estimated",
     currency: "USD",

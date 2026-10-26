@@ -114,10 +114,6 @@ const OPENROUTER_TTS_PER_CHARACTER: [string, number][] = [
   ["elevenlabs/eleven-flash-v2", 40],
   ["elevenlabs/eleven-turbo-v2.5", 40],
   ["elevenlabs/eleven-turbo-v2", 40],
-  ["fish-audio/drama-3", 2],
-  ["fish-audio/s1", 15],
-  ["fish-audio/s2-pro", 15],
-  ["fish-audio/s2.1-pro", 15],
   ["mistralai/voxtral-mini-tts-3-0", 13],
   ["mistralai/voxtral-mini-tts-2603", 16],
   ["heygen/heygen-voice-1", 15],
@@ -138,7 +134,25 @@ const OPENROUTER_TTS_PER_CHARACTER: [string, number][] = [
   ["hexgrad/kokoro-82m", 0.62],
 ];
 
-/** OpenRouter STT models priced per second of audio: [id, USD per second, as listed]. */
+/**
+ * Fish Audio bills UTF-8 bytes upstream, and OpenRouter lists s1/s2 at the
+ * upstream per-byte price, so the bytes meter is the safe reading (bytes are
+ * never fewer than characters): [id, USD per 1M bytes].
+ */
+const OPENROUTER_TTS_PER_BYTE: [string, number][] = [
+  ["fish-audio/s1", 15],
+  ["fish-audio/s2-pro", 15],
+  ["fish-audio/s2.1-pro", 15],
+];
+
+/**
+ * OpenRouter STT models priced per second of audio: [id, USD per second, as
+ * listed]. Left out: token-priced models (openai/gpt-4o-transcribe,
+ * openai/gpt-4o-mini-transcribe, google/gemini-3.5-transcribe), and
+ * microsoft/mai-transcribe-1.5 / -2, whose listed prompt price (0.36, 0.1)
+ * cannot be per second (that would be $1296/$360 an hour), so their unit is
+ * unknown.
+ */
 const OPENROUTER_STT_PER_SECOND: [string, number][] = [
   ["openai/whisper-large-v3-turbo", 0.00000333],
   ["openai/whisper-large-v3", 0.0000075],
@@ -212,6 +226,23 @@ const OPENROUTER_ENTRIES: PriceEntry[] = [
       [{ components: [perM("characters", usd)] }],
       OPENROUTER_TTS_PRICING,
     ),
+  ),
+  ...OPENROUTER_TTS_PER_BYTE.map(([model, usd]) =>
+    openrouterEntry(
+      model,
+      [model],
+      [{ components: [perM("utf8_bytes", usd)] }],
+      OPENROUTER_TTS_PRICING,
+    ),
+  ),
+  // Upstream Fish ends its drama-3 promotion 2026-11-12T17:00Z; OpenRouter's
+  // $2/M (below even the upstream promotion) is not trusted past that instant,
+  // so later runs are unknown until the price is re-checked.
+  openrouterEntry(
+    "fish-audio/drama-3",
+    ["fish-audio/drama-3"],
+    [{ until: "2026-11-12T17:00:00Z", label: "promotion", components: [perM("utf8_bytes", 2)] }],
+    OPENROUTER_TTS_PRICING,
   ),
   ...OPENROUTER_STT_PER_SECOND.map(([model, usd]) =>
     openrouterEntry(

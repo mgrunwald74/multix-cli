@@ -64,7 +64,12 @@ describe("pricing catalog", () => {
 
 describe("unit counting", () => {
   it("counts Vietnamese characters as code points and bytes as UTF-8", () => {
-    expect(countText(VI_NFC)).toEqual({ characters: 17, nfc_characters: 17, utf8_bytes: 22 });
+    expect(countText(VI_NFC)).toEqual({
+      characters: 17,
+      nfc_characters: 17,
+      utf16_units: 17,
+      utf8_bytes: 22,
+    });
     // Decomposed input has more code points (billed characters) but the same NFC length.
     const nfd = countText(VI_NFD);
     expect(nfd.characters).toBeGreaterThan(17);
@@ -73,7 +78,7 @@ describe("unit counting", () => {
   });
 
   it("counts emoji and CJK as one character each", () => {
-    expect(countText("ok 👍")).toMatchObject({ characters: 4, utf8_bytes: 7 });
+    expect(countText("ok 👍")).toMatchObject({ characters: 4, utf16_units: 5, utf8_bytes: 7 });
     expect(countText("你好")).toMatchObject({ characters: 2, utf8_bytes: 6 });
   });
 });
@@ -193,8 +198,8 @@ describe("OpenRouter speech estimates", () => {
       upper_bound: "estimated",
       model: "openai/whisper-large-v3-turbo",
     });
-    // 480 kB = 3.84 Mbit: 12 s at 320 kbps, 60 s at 64 kbps, 640 s at 6 kbps.
-    expect(e.units.input_audio_seconds).toEqual({ low: 12, expected: 60, high: 640 });
+    // 480 kB = 3.84 Mbit: 12 s at 320 kbps, 60 s at 64 kbps, 960 s at 4 kbps.
+    expect(e.units.input_audio_seconds).toEqual({ low: 12, expected: 60, high: 960 });
     expect(() => checkBudget(e, 1, "strict")).toThrow(/not a proven cap/);
     expect(() => checkBudget(e, 1, "estimate")).not.toThrow();
   });
@@ -210,6 +215,73 @@ describe("OpenRouter speech estimates", () => {
         { at: AT, audio: { seconds: 3 } },
       ),
     ).toMatchObject({ status: "unknown", reason: "no_price" });
+  });
+
+  it("a duration that is not a finite number is never a proven ceiling", () => {
+    const e = estimateCommand(
+      "openrouter transcribe",
+      { input: "a.mp3" },
+      { at: AT, audio: { seconds: Number.NaN, bytes: 48_000 } },
+    );
+    expect(e.upper_bound).toBe("estimated");
+  });
+
+  it("the character ceiling counts emoji as two (UTF-16), never fewer than code points", () => {
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: "😀".repeat(1000), model: "minimax/speech-2.8-hd" },
+      { at: AT },
+    );
+    expect(e.units.characters).toEqual({ low: 1000, expected: 1000, high: 2000 });
+    expect(e.high_usd).toBeCloseTo((2000 * 100) / 1e6, 9);
+    expect(e.upper_bound).toBe("proven");
+  });
+
+  it("OpenRouter Fish models are priced on UTF-8 bytes, like Fish itself", () => {
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: VI_NFC, model: "fish-audio/s2-pro" },
+      { at: AT },
+    );
+    expect(e.units.utf8_bytes).toEqual({ low: 22, expected: 22, high: 22 });
+    expect(e.units.characters).toBeUndefined();
+  });
+
+  it("OpenRouter drama-3 is unknown once the upstream promotion ends", () => {
+    const run = (at: string) =>
+      estimateCommand(
+        "openrouter tts",
+        { text: "hi", model: "fish-audio/drama-3" },
+        { at: new Date(at) },
+      );
+    expect(run("2026-11-12T16:59:59Z").status).toBe("estimated");
+    expect(run("2026-11-12T17:00:00Z")).toMatchObject({ status: "unknown", reason: "no_window" });
+  });
+
+  it("text inside --provider-options counts in the high end", () => {
+    const providerOptions = JSON.stringify({ elevenlabs: { previous_text: "x".repeat(500) } });
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: "hi", model: "elevenlabs/eleven-v4", providerOptions },
+      { at: AT },
+    );
+    expect(e.units.characters?.high).toBe(2 + providerOptions.length);
+  });
+
+  it("every OpenRouter per-second STT price is a plausible per-second rate ($0.001-$5 an hour)", () => {
+    const stt = PRICING_CATALOG.filter((p) =>
+      p.windows.some((w) => w.components.some((c) => c.meter === "input_audio_seconds")),
+    );
+    expect(stt.length).toBeGreaterThan(20);
+    for (const entry of stt) {
+      for (const w of entry.windows) {
+        for (const c of w.components) {
+          const perHour = (c.usd / c.per) * 3600;
+          expect(perHour, entry.id).toBeGreaterThan(0.001);
+          expect(perHour, entry.id).toBeLessThan(5);
+        }
+      }
+    }
   });
 
   it("an OpenRouter TTS model billed per generated second is not priced", () => {

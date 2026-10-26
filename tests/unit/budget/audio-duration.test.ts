@@ -49,6 +49,21 @@ describe("wavDurationSeconds", () => {
     expect(wavDurationSeconds(understated, understated.length)).toBe(4);
   });
 
+  it("never trusts a header whose fields disagree, a compressed format, or two fmt chunks", () => {
+    const lie = Buffer.from(wav({ seconds: 2 }));
+    lie.writeUInt32LE(0xffffffff, 28); // byteRate
+    expect(wavDurationSeconds(new Uint8Array(lie), lie.length)).toBeUndefined();
+    const adpcm = Buffer.from(wav({ seconds: 2 }));
+    adpcm.writeUInt16LE(0x0011, 20); // IMA ADPCM
+    expect(wavDurationSeconds(new Uint8Array(adpcm), adpcm.length)).toBeUndefined();
+    const align = Buffer.from(wav({ seconds: 2 }));
+    align.writeUInt16LE(1, 32); // blockAlign 1 for 16-bit mono
+    expect(wavDurationSeconds(new Uint8Array(align), align.length)).toBeUndefined();
+    const base = Buffer.from(wav({ seconds: 2 }));
+    const twice = Buffer.concat([base.subarray(0, 36), base.subarray(12, 36), base.subarray(36)]);
+    expect(wavDurationSeconds(new Uint8Array(twice), twice.length)).toBeUndefined();
+  });
+
   it("is undefined for other formats and truncated headers", () => {
     expect(
       wavDurationSeconds(new TextEncoder().encode("ID3\u0004 not a wav file")),

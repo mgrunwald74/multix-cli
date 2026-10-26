@@ -9,8 +9,10 @@
 import { BudgetError } from "../core/errors.js";
 import { TASK_DEFAULTS as ELEVENLABS_DEFAULTS } from "../providers/elevenlabs/models.js";
 import { TTS_MODEL_DEFAULT as GEMINI_TTS_DEFAULT } from "../providers/gemini/voices.js";
-import { DEFAULT_OPENROUTER_TTS_MODEL } from "../providers/openrouter/speech-client.js";
-import { DEFAULT_OPENROUTER_STT_MODEL } from "../providers/openrouter/transcription-client.js";
+import {
+  DEFAULT_OPENROUTER_STT_MODEL,
+  DEFAULT_OPENROUTER_TTS_MODEL,
+} from "../providers/openrouter/speech-defaults.js";
 import {
   type AudioInput,
   type CostEstimate,
@@ -84,12 +86,16 @@ const BUILDERS: Record<string, RequestBuilder> = {
   "openrouter tts": (o, d) => {
     const text = opt(o, "text") ?? opt(o, "prompt");
     if (text === undefined) return undefined;
-    const instructions = opt(o, "instructions");
+    // Provider passthrough options can carry billed text (e.g. previous_text):
+    // the raw JSON is at least as long as any text inside it.
+    const extra = [opt(o, "instructions"), opt(o, "provider-options")].filter(
+      (t): t is string => t !== undefined,
+    );
     return {
       provider: "openrouter",
       model: openrouterModel(o, d, DEFAULT_OPENROUTER_TTS_MODEL),
       text,
-      ...(instructions ? { extra_text: [instructions] } : {}),
+      extra_text: extra,
     };
   },
   "openrouter transcribe": (o, d) => {
@@ -139,7 +145,7 @@ export function estimateCommand(
     expected_usd: null,
     high_usd: null,
     upper_bound: "none",
-    text: { characters: 0, nfc_characters: 0, utf8_bytes: 0 },
+    text: { characters: 0, nfc_characters: 0, utf16_units: 0, utf8_bytes: 0 },
     units: {},
     assumptions: [],
     at,
@@ -186,7 +192,7 @@ export function checkBudget(estimate: CostEstimate, maxCost: number, policy: Cos
   }
   if (estimate.upper_bound !== "proven" && policy !== "estimate") {
     throw new BudgetError(
-      `Refusing to run: the provider bills output it has not produced yet, so the high estimate ${usd(estimate.high_usd)} is not a proven cap. Re-run with --cost-policy estimate to accept the estimated high end against --max-cost ${usd(maxCost)}.`,
+      `Refusing to run: the billed units are not known up front (output not produced yet, or audio of unmeasured length), so the high estimate ${usd(estimate.high_usd)} is not a proven cap. Re-run with --cost-policy estimate to accept the estimated high end against --max-cost ${usd(maxCost)}.`,
       "BUDGET_UNPROVEN",
     );
   }
