@@ -14,10 +14,10 @@ import { assertPublicHttpsUrl } from "../url-guard.js";
 import type { CliOption } from "./cli-catalog-types.js";
 import { CatalogIndex, isRepeatable, normaliseCommand, optionName } from "./cli-catalog.js";
 import {
+  type CommandPolicy,
   GLOBALLY_UNSUPPORTED_OPTIONS,
   OUTPUT_DIR_OPTION,
   OUTPUT_FILE_OPTION,
-  type CommandPolicy,
   policyFor,
 } from "./cli-command-policy.js";
 import type { JobInputFile } from "./job-protocol.js";

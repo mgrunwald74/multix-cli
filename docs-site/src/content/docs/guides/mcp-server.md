@@ -143,6 +143,13 @@ start with `@`, so put text before an `@tag` (`"a portrait of @hero"`).
 set `"wait": true` in `options` to get the video, or run
 `runway status <id> --wait --download` later.
 
+**Speech.** `speech generate` must name `--provider`. The job gets only the
+keys of the providers named by `--provider` and `--fallback`, not every speech
+key you saved. Give `--text-file` as an `https://` URL in `inputs`.
+`speech models --ready` is rejected remotely because it would describe the
+container; `multix_catalog` reports `has_keys` for your saved keys instead.
+See [Speech commands](/commands/speech/).
+
 ### Not available remotely
 
 - Local files: give a public `https://` URL in `inputs` instead.
@@ -492,7 +499,8 @@ within your Cloudflare account. If another Worker already uses `1001` or
   list from the CLI's command catalog and rejects unknown commands and
   options, `@file` values, file paths and NUL characters; values are passed as
   `--name=value` and positionals after `--`, and the CLI is started without a
-  shell. The CLI process gets only the keys for the command's provider group,
+  shell. The CLI process gets only the keys for the command's provider group (for
+  `speech generate`, the providers it routes to),
   a fresh temporary home directory and `MULTIX_DISABLE_HOME_ENV=1`. Input URLs
   go through the same SSRF guard in the Worker and again in the container on
   every redirect; the container also resolves each host and refuses to

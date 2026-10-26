@@ -120,6 +120,7 @@ shell hoặc `~/.multix/.env`, không nhận từ `.env` của project).
 | Nhu cầu | Bắt đầu từ |
 | --- | --- |
 | Phân tích hoặc transcribe file | [Gemini](/vi/commands/gemini/) |
+| Speech từ mọi provider TTS: so sánh model theo ngôn ngữ, một kiểu request | [Speech](/vi/commands/speech/) |
 | Sinh/sửa ảnh, speech hoặc transcription | [OpenAI](/vi/commands/openai/) |
 | Ảnh, video, speech hoặc music MiniMax | [MiniMax](/vi/commands/minimax/) |
 | Ảnh hoặc image-to-video qua routing | [OpenRouter](/vi/commands/openrouter/) |

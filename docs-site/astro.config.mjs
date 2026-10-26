@@ -79,6 +79,11 @@ export default defineConfig({
           translations: { vi: "Lệnh" },
           items: [
             { label: "Command overview", translations: { vi: "Tổng quan lệnh" }, slug: "commands" },
+            {
+              label: "Speech (all providers)",
+              translations: { vi: "Speech (mọi provider)" },
+              slug: "commands/speech",
+            },
             { label: "Gemini", slug: "commands/gemini" },
             { label: "OpenAI", slug: "commands/openai" },
             { label: "MiniMax", slug: "commands/minimax" },

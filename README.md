@@ -710,6 +710,33 @@ multix heygen me
 - `--callback-url` webhooks are signed with HMAC-SHA256 of the raw body (hex, `signature` header). The npm package does not export a verifier; copy `src/providers/heygen/webhook.ts` or the Node snippet in the [HeyGen docs](https://multix.zuey.me/commands/heygen/#webhooks).
 - Digital-twin creation and voice cloning are out of scope. Full reference: [HeyGen commands](https://multix.zuey.me/commands/heygen/).
 
+### `multix speech`
+
+One text-to-speech interface over Gemini, OpenAI, ElevenLabs, MiniMax and Atlas Cloud. The provider commands above are unchanged; `speech` adds one set of flags, checks the request against the chosen model's documented capabilities before calling it, and never switches provider on its own.
+
+```bash
+# Models with their languages, formats, style/emotion support, speakers, voices, billing and key readiness
+multix speech models [-p <provider>] [-l <iso-639-1>] [--ready] [--json]
+
+# Generate on an explicit provider (model defaults to the provider's TTS default)
+multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas> [--model <id>] (--text <str>|--text-file <path>) \
+  [--voice <id>] [--speaker <name:voice> ...] [--language <code>] [--style <text>] [--emotion <name>] \
+  [--format mp3|wav|pcm|flac|opus|aac] [--output <path>] [--async] \
+  [--fallback <provider[:model[:voice]]> ...] [--extra <provider.key=value> ...] [-v]
+
+# Vietnamese two-speaker dialogue (Gemini); each line of scene.txt starts with "Lan:" or "Minh:"
+multix speech generate --provider gemini --language vi --text-file scene.txt \
+  --speaker "Lan:Kore" --speaker "Minh:Puck" --output scene.wav
+
+# Vietnamese with a named emotion (MiniMax)
+multix speech generate --provider minimax --language vi --emotion happy --text "Xin chào các bạn!" --output hello.mp3
+```
+
+- `--model` without `--provider` works only when exactly one provider serves that model.
+- `--fallback` is opt-in and used only when the routes before it have no API key, so it is decided before any paid request; a paid request is never sent again elsewhere. Taking a fallback prints a warning with the voice, billing and format differences.
+- `--json` puts a `multix.speech.result/v1` object in `data` (the text is recorded as length and SHA-256, not echoed); `--dry-run` validates and shows the first request without sending it.
+- Remote MCP: `speech generate` requires `--provider`, and the job gets only the routed providers' keys. Full reference: [Speech commands](https://multix.zuey.me/commands/speech/).
+
 ### `multix media`
 
 Requires `ffmpeg` (video/audio) and `magick` (images) on PATH.

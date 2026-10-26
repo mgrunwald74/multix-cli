@@ -139,6 +139,13 @@ bị giới hạn bởi `MULTIX_MCP_MAX_VIDEO_SECONDS`. Prompt không được b
 mặc định không chờ, nên job kết thúc chỉ với task ID: đặt `"wait": true` trong
 `options` để nhận video, hoặc chạy `runway status <id> --wait --download` sau.
 
+**Speech.** `speech generate` phải nêu `--provider`. Job chỉ nhận key của các
+provider được nêu trong `--provider` và `--fallback`, không phải mọi key speech
+bạn đã lưu. Truyền `--text-file` dưới dạng URL `https://` trong `inputs`.
+`speech models --ready` bị từ chối khi chạy từ xa vì nó sẽ mô tả container;
+thay vào đó `multix_catalog` báo `has_keys` theo key bạn đã lưu. Xem
+[Lệnh speech](/vi/commands/speech/).
+
 ### Không hỗ trợ từ xa
 
 - File cục bộ: thay bằng URL `https://` công khai trong `inputs`.
@@ -486,7 +493,8 @@ chung bộ đếm.
   tham số từ catalog lệnh của CLI và từ chối lệnh, option không có trong
   catalog, giá trị `@file`, đường dẫn file và ký tự NUL; giá trị được truyền
   dạng `--name=value`, positional nằm sau `--`, và CLI được chạy không qua
-  shell. Tiến trình CLI chỉ nhận key của nhóm provider ứng với lệnh, một thư
+  shell. Tiến trình CLI chỉ nhận key của nhóm provider ứng với lệnh (với
+  `speech generate` là các provider mà nó route tới), một thư
   mục home tạm mới và `MULTIX_DISABLE_HOME_ENV=1`. URL input đi qua cùng lớp
   chặn SSRF ở Worker và một lần nữa trong container ở mỗi lần redirect;
   container còn phân giải từng host và từ chối kết nối khi có bất kỳ địa chỉ

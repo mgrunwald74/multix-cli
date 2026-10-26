@@ -21,6 +21,7 @@ description: Chọn nhóm lệnh multix phù hợp với workflow media của b�
 | [Replicate](/vi/commands/replicate/) | Bất kỳ model Replicate nào qua API trực tiếp, lệnh tiện lợi image/video, cùng status/cancel prediction. |
 | [Runway](/vi/commands/runway/) | Video Gen-4.5 và Gen-4 Turbo, ảnh Gen-4, cùng status/cancel task. |
 | [HeyGen](/vi/commands/heygen/) | Video Agent tạo video từ prompt, video avatar theo kịch bản, dịch video, lipsync và TTS. |
+| [Speech](/vi/commands/speech/) | Text-to-speech trên Gemini, OpenAI, ElevenLabs, MiniMax hoặc Atlas Cloud với một bộ flag, kiểm tra khả năng của model và fallback phải tự bật. |
 | `multix media` | Tối ưu, cắt và batch file bằng ffmpeg/ImageMagick. |
 | `multix doc` | Chuyển tài liệu sang Markdown qua Gemini. |
 | `multix update` | Tự cập nhật multix lên version mới nhất, hoặc một version cụ thể đã publish. |

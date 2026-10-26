@@ -123,6 +123,7 @@ or `~/.multix/.env` only, not a project `.env`).
 | Need | Start with |
 | --- | --- |
 | Analyze or transcribe files | [Gemini](/commands/gemini/) |
+| Speech from any TTS provider: compare models by language, one request shape | [Speech](/commands/speech/) |
 | Generate or edit images, speech, or transcription | [OpenAI](/commands/openai/) |
 | MiniMax image, video, speech, or music | [MiniMax](/commands/minimax/) |
 | Routed image or image-to-video | [OpenRouter](/commands/openrouter/) |

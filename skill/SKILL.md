@@ -31,6 +31,7 @@ Activate this skill when the user asks to:
 - **Generate video via BytePlus Seedance** directly (text-to-video, image-to-video, reference-to-video)
 - **Generate video via Leonardo** (Motion, Veo, Kling, Hailuo, Seedance, LTX models)
 - Generate images or speech with Cloudflare Workers AI, or video through Cloudflare AI Gateway's Replicate route
+- Generate speech on any TTS provider with one flag set, or pick a TTS model by language (`multix speech`)
 - Generate or clone a voice, run STT, generate music or sound effects
 - Generate 3D models (BytePlus Hyper3D / Hitem3d)
 - Analyze, transcribe, or extract structured data from media/docs
@@ -394,6 +395,32 @@ User wants to generate a video?
 - If one provider's key is unavailable, fall back to another that supports the same capability.
 
 ## Speech, music, voice, 3D, docs, media
+
+### Speech across providers (`multix speech`)
+
+Discover, then generate on an explicit provider. The request is checked against the model's languages, voices, formats, style/emotion support before any call.
+
+```bash
+multix speech models --language vi --json      # models documenting Vietnamese: formats, style, emotions, max_speakers, async, voices, extras, billing, ready
+multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas> [--model <id>] --text-file scene.txt --output <file.ext> --dry-run --json
+multix speech generate --provider <...> [--model <id>] --text-file scene.txt --output <file.ext> --json
+
+# Vietnamese two-speaker dialogue (Gemini, max 2 speakers); scene.txt:
+#   Lan: Chào anh Minh, hôm nay anh khỏe không?
+#   Minh: Chào Lan, anh khỏe lắm, cảm ơn em!
+multix speech generate --provider gemini --language vi --text-file scene.txt \
+  --speaker "Lan:Kore" --speaker "Minh:Puck" --output scene.wav --json
+# Vietnamese with a named emotion (MiniMax)
+multix speech generate --provider minimax --language vi --emotion happy --text "Xin chào các bạn!" --output hello.mp3 --json
+```
+
+- Never switches provider silently: pass `--provider` (a bare `--model` works only if exactly one provider serves it).
+- `--fallback provider[:model[:voice]]` (repeatable) is opt-in, used only when earlier routes lack an API key, before any paid request; a paid request is never resent. A fallback prints a warning with voice/billing/format differences (`data.fallback` in JSON).
+- `--voice` must belong to the chosen provider; `--extra <provider.key=value>` for provider options (keys listed in `speech models`).
+- JSON `data` = `multix.speech.result/v1`: `request` (text as `text_chars` + `text_sha256`, not echoed), `route`, files or async `job`.
+- Remote MCP: `--provider` required; `--text-file` is an `inputs` URL; `speech models --ready` unavailable.
+
+### Provider TTS commands
 
 ```bash
 # TTS
