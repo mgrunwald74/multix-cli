@@ -45,13 +45,39 @@ const SKIP_KEY =
  * match whole segments so a spend leaf under e.g. subscription_job still counts.
  */
 const BALANCE_LEAF =
-  /(balance|remaining|available|allowance|included|quota|granted|purchased|^api_?credits?$)/i;
+  /(balance|remaining|available|allowance|included|quota|granted|purchased|unused|left|^api_?credits?$)/i;
 const BALANCE_PARENT = /^(wallet|subscription|user_details|balances?)$/i;
+/**
+ * Words that make a leaf a spend even when it also names a balance
+ * (quota_credits_used, includedCreditsSpent, subscription.credits_used). Matched
+ * as whole words of the snake_case or camelCase key, so unused_credits stays a balance.
+ */
+const SPEND_WORDS = new Set(["used", "spent", "consumed", "cost", "charged"]);
 
-function isBalancePath(path: string): boolean {
+function leafWords(leaf: string): string[] {
+  return leaf
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replace(/([a-zA-Z])([0-9])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/);
+}
+
+/**
+ * "plain": a spend key; "balance": what an account holds, never a spend;
+ * "spend-in-balance": a spend word inside a balance name or parent, which counts
+ * only when the response has no plain spend key (a job's credits beat a
+ * subscription's credits_used).
+ */
+type PathKind = "plain" | "balance" | "spend-in-balance";
+
+function pathKind(path: string): PathKind {
   const segments = path.split(".").map((segment) => segment.replace(/\[\d+\]$/, ""));
   const leaf = segments.pop() ?? "";
-  return BALANCE_LEAF.test(leaf) || segments.some((segment) => BALANCE_PARENT.test(segment));
+  const balance =
+    BALANCE_LEAF.test(leaf) || segments.some((segment) => BALANCE_PARENT.test(segment));
+  if (!balance) return "plain";
+  return leafWords(leaf).some((word) => SPEND_WORDS.has(word)) ? "spend-in-balance" : "balance";
 }
 /** Key paths that name a forecast, not a charge (Runway estimatedCost, quotes). */
 const ESTIMATE_PATH = /(estimat|quote|expected)/i;
@@ -186,23 +212,25 @@ export function extractUsage(body: unknown, headers?: Headers | null): ResponseU
     tokensFrom(obj, out.tokens);
     walk(obj, "", 0, out);
   }
-  for (const [path, value] of Object.entries(out.metrics)) {
-    const leaf = path.split(".").pop() ?? path;
-    // Balances are never reported as cost or credits spent.
-    if (isBalancePath(path)) continue;
-    // Estimates stay in metrics but are never reported as cost or credits spent.
-    if (ESTIMATE_PATH.test(path)) continue;
-    if (
-      out.cost_usd === undefined &&
-      /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
-      // OpenRouter's GET /generation reports the charge as data.total_cost.
-      (/usage|^cost|billing/i.test(path) || path === "data.total_cost")
-    ) {
-      out.cost_usd = value;
-      out.sources = { ...out.sources, cost_usd: `body.${path}` };
-    } else if (out.credits === undefined && /credit/i.test(leaf)) {
-      out.credits = value;
-      out.sources = { ...out.sources, credits: `body.${path}` };
+  for (const kind of ["plain", "spend-in-balance"] as const) {
+    for (const [path, value] of Object.entries(out.metrics)) {
+      const leaf = path.split(".").pop() ?? path;
+      // Balances never count; a spend inside a balance counts only when no plain one does.
+      if (pathKind(path) !== kind) continue;
+      // Estimates stay in metrics but are never reported as cost or credits spent.
+      if (ESTIMATE_PATH.test(path)) continue;
+      if (
+        out.cost_usd === undefined &&
+        /^(cost|total_cost|cost_usd|usd)$/i.test(leaf) &&
+        // OpenRouter's GET /generation reports the charge as data.total_cost.
+        (/usage|^cost|billing/i.test(path) || path === "data.total_cost")
+      ) {
+        out.cost_usd = value;
+        out.sources = { ...out.sources, cost_usd: `body.${path}` };
+      } else if (out.credits === undefined && /credit/i.test(leaf)) {
+        out.credits = value;
+        out.sources = { ...out.sources, credits: `body.${path}` };
+      }
     }
   }
   if (headers) {
