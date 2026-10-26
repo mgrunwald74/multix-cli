@@ -74,3 +74,25 @@ pricing-catalog.ts:139-163. The snapshot itself shows that `pricing.prompt` does
 - How does OpenRouter count TTS "characters" (UTF-16, code points, or the upstream unit such as Fish's UTF-8 bytes)?
 - Do OpenRouter STT routes have minimum billable durations or per-channel billing (Deepgram/Google multichannel)?
 - Is OpenRouter's drama-3 $2/M a promotion, and what is its end date?
+
+## Re-review of 8248e29 (2026-10-26)
+
+Checks: budget unit and smoke tests 61/61 pass; typecheck, biome (26 files) and `npm run check:mcp` (worker typecheck, tests, bundle clean) pass; src/budget and speech-defaults.ts have no `node:*` imports.
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| C1 | Fixed | lie.wav and lie2.wav (forged byteRate) through dist/cli.js with `--max-cost 0.01`: BUDGET_UNPROVEN (size guess, high $10.24). A non-PCM tag (0x11) parses as undefined; a duplicate fmt chunk is rejected; the extensible GUID tail matches KSDATAFORMAT_SUBTYPE_PCM/IEEE_FLOAT. |
+| H1 | Fixed | 10 emoji give characters high 20; OpenRouter Fish s1/s2 are on utf8_bytes. |
+| H2 | Fixed | drama-3 at 2026-11-12T17:00:01Z is unknown/no_window; one hour before, it is proven on bytes. |
+| M1 | Fixed | The raw `--provider-options` JSON is counted in the high end. JSON escaping only lengthens it, so the raw string is never shorter than the text inside, in UTF-16 units or UTF-8 bytes. |
+| M2 | Fixed | Constants module added; the clearTimeout edit is reverted and the worker still typechecks. |
+| M3 | Fixed | Exclusion comment and plausibility test added. |
+| L1 | Fixed | A NaN duration now gives upper_bound "estimated". |
+| L4 | Fixed | The size-guess floor is 4 kbps. |
+| L2, L3, L5 | Accepted as not changed | Rationale is reasonable; L2 stays an unresolved question. |
+
+New probes against the strict proven path:
+- **Consistent fields with an absurd sample rate.** A 600 s, 16 kHz recording relabelled as 2 GHz (or 1 MHz), with byteRate and blockAlign consistent: the parser gives 0.0048 s (9.6 s). ffprobe gives the same 0.0048 s (9.6 s), so the decoded length a provider bills on matches the estimate. This is not a bypass. Optional hardening, not blocking: reject sampleRate above 384 kHz so that a provider that does not read the header cannot diverge.
+- **Numeric MCP option values (new, low, not blocking).** The Worker argv builder turns a finite number into a string (`scalar()`, worker/src/jobs/run-argv-builder.ts:96-97), but `opt()` (src/budget/command-cost.ts) drops anything that is not a string. Example: `{"text":"hi","instructions":12345}` on elevenlabs/eleven-v4 is proven with characters high 2, while "12345" is sent. The gap is at most about 20 characters per option (about $0.002 at $80/M), and the same code path already affects `previous-text`/`next-text`/`style`. A numeric `text` stays unknown, so it fails closed. Fix: in `opt()`, accept finite numbers as `String(value)`.
+
+Remaining blocking issues: none.

@@ -31,6 +31,8 @@ function camel(name: string): string {
 
 function opt(options: Options, name: string): string | undefined {
   const value = options[name] ?? options[camel(name)];
+  // The MCP Worker sends a number option as its decimal string, so price it as one.
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 

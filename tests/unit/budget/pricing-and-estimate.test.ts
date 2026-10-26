@@ -258,6 +258,15 @@ describe("OpenRouter speech estimates", () => {
     expect(run("2026-11-12T17:00:00Z")).toMatchObject({ status: "unknown", reason: "no_window" });
   });
 
+  it("a number option (as MCP may pass it) is priced as the text the run sends", () => {
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: "hi", instructions: 12345, model: "elevenlabs/eleven-v4" },
+      { at: AT },
+    );
+    expect(e.units.characters?.high).toBe(7);
+  });
+
   it("text inside --provider-options counts in the high end", () => {
     const providerOptions = JSON.stringify({ elevenlabs: { previous_text: "x".repeat(500) } });
     const e = estimateCommand(
