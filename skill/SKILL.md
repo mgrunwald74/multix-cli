@@ -1,7 +1,7 @@
 ---
 name: multix
-description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
-version: 1.19.0 # x-release-please-version
+description: AI multimodal CLI — generate and edit images (OpenAI, Codex driver, Gemini Nano Banana, Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai FLUX, Replicate FLUX, Runway Gen-4 Image), generate, edit and extend video (Gemini Omni Flash, plus legacy Gemini Veo), generate video (MiniMax Hailuo, OpenRouter via Veo/Seedance/Kling, Leonardo via Motion/Veo/Kling/Hailuo/Seedance/LTX, BytePlus Seedance, Cloudflare AI Gateway via Replicate, fal.ai queue models, Replicate direct API models incl. P-Video, Runway Gen-4.5 and Gen-4 Turbo, HeyGen Video Agent and scripted avatar videos), video translation and lipsync (HeyGen), TTS/STT/music (OpenAI, Gemini Flash TTS incl. Gemini 3.8 with delivery-style control, OpenRouter TTS (Gemini, ElevenLabs, Fish Audio, MiniMax routed) and STT (Whisper, GPT-4o transcribe, Gemini Transcribe, ElevenLabs Scribe, Voxtral, Deepgram, AssemblyAI routed), MiniMax, Cloudflare Workers AI MeloTTS, ElevenLabs), multi-character dialogue audio with per-character voice profiles, cached per-line takes and stem export (multix scene), 3D models (BytePlus Hyper3D/Hitem3d), analyze/transcribe media, convert documents to Markdown, optimize media via ffmpeg/ImageMagick, and self-update the CLI. Use whenever the user wants to create, edit, or transform images/video/audio/3D/documents from a CLI, mentions any of: OpenAI, Codex image driver, image-to-image, i2i, image edit, watercolor/cyberpunk style transfer, reference image, OpenRouter, Nano Banana, Flux, Seedream, Gemini Omni, Omni Flash, Veo, Hailuo, Seedance, Kling, Cloudflare Workers AI, AI Gateway, fal.ai, Atlas Cloud, Replicate, replicate.com models, Replicate predictions, Runway, Gen-4.5, Gen-4 Turbo, Gen-4 Image, HeyGen, avatar video, talking head, Video Agent, video translation, dubbing, lipsync, video generation, text-to-video, image-to-video, i2v, ElevenLabs voice cloning, updating/upgrading multix, or asks for batch media optimization.
+version: 1.21.1 # x-release-please-version
 ---
 
 # multix — AI Multimodal CLI
@@ -10,11 +10,14 @@ version: 1.19.0 # x-release-please-version
 
 ```bash
 multix models --task <task> --ready     # command + default model per task, key set or not
+multix models --model <id>              # verified model: inputs, voices, formats, example; else verified null
+multix models --task <task> --live      # + models fal/OpenRouter catalogs list now, marked verified or not
 multix <group> <cmd> ... --dry-run      # free: local checks, then shows the request instead of sending it
 multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.result/v1
 ```
 
 - Tasks: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any. `multix guide` prints the protocol for the installed version.
+- Models: only ids in the verified registry have known inputs; `any_model: true` rows (`fal run`, `replicate run`, OpenRouter, Atlas) pass any id through unverified (`model_scope` says which). Speech through fal: the `fal tts` row (typed, checked flags) and the `fal run` row (MiniMax) list their `verified_models`; copy a model's `example`. `--live` rows carry `verified` and `listed` (true/false, null = catalog unread or `truncated`); `status: "missing"` = verified model the catalog dropped (removed or renamed); a `sources[]` entry with `state: "unavailable"` (offline, no cache or one older than 7 days) confirms nothing. Cache `~/.multix/cache/models`, 1 day (`--refresh`, `MULTIX_CACHE_DIR`, `MULTIX_MODELS_TTL` up to 7 days).
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
 - `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
@@ -45,6 +48,7 @@ Activate this skill when the user asks to:
 - Run any Replicate model (official or versioned) via the direct API, generate Replicate images/video, or resume/cancel a Replicate prediction by id
 - Generate Runway Gen-4.5 / Gen-4 Turbo video or Gen-4 images (with tagged reference images), or check/resume/cancel a Runway task by id
 - Make HeyGen avatar videos from a prompt (Video Agent) or an exact script, translate/lipsync videos, HeyGen TTS
+- Voice a multi-character dialogue (anime, film, audio drama) line by line with a fixed voice per character, approve takes, and export stems (`multix scene`)
 - Update multix itself to the latest (or a given dist-tag) npm version
 
 ## Self-update
@@ -171,7 +175,7 @@ multix fal status <model> <requestId>
 multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]   # --format for raw speech formats; detach receipts include it
 ```
 
-`--detach` leaves a receipt in `~/.multix/fal/requests/` (or at `--receipt <path>`, which also works without `--detach`; mode 0600, no input or key). `status`/`result` never resubmit, so resume a detached or timed-out job with them instead of running `fal run` again. `UNKNOWN_REMOTE_STATE` means fal may or may not have queued the submit (connection cut off, 5xx gateway error): check https://fal.ai/dashboard/requests before resubmitting. `fal tts` refuses a flag the model has no field for (`--style` on ElevenLabs, `--format` on Gemini) and a voice or format outside the model's list, before sending. It saves `fal-<id>-01.<ext>` with the extension taken from the bytes (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the format) and refuses empty, error-page or mislabelled audio; `--detach` and `fal result --download` work as for `run`. `--file`/`fal upload` take image, video and audio only (`FAL_MAX_UPLOAD_MB`, default 1024); the uploaded URL is public to anyone with the link.
+`--detach` leaves a receipt in `~/.multix/fal/requests/` (or at `--receipt <path>`, which also works without `--detach`; mode 0600, no input or key). `status`/`result` never resubmit, so resume a detached or timed-out job with them instead of running `fal run` again. `UNKNOWN_REMOTE_STATE` means fal may or may not have queued the submit (connection cut off, 5xx gateway error): check https://fal.ai/dashboard/requests before resubmitting. `fal tts` refuses a flag the model has no field for (`--style` on ElevenLabs, `--format` on Gemini) and a voice or format outside the model's list, before sending. It saves `fal-<id>-01.<ext>` with the extension taken from the bytes (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the format) and refuses empty, error-page or mislabelled audio; `--detach` and `fal result --download` work as for `run`. `--file`/`fal upload` take image, video and audio only (`FAL_MAX_UPLOAD_MB`, default 1024); the uploaded URL is public to anyone with the link. For a verified model (`multix models --model <id>`), `fal run` warns about `--input` fields it does not take, required ones that are missing and values outside its listed choices; it still submits.
 
 ## Atlas Cloud
 
@@ -269,6 +273,27 @@ multix heygen status <id> --type agent|video|translation|lipsync|model-video --w
 - `<ref>` = `https://` URL, `asset:<asset_id>`, or a local file (uploaded, max 32 MB).
 - Commands wait and download by default. `--async` prints IDs and a resume command; `--type agent` resumes with the Video Agent `session_id`.
 - Failed jobs exit 1 with HeyGen's failure code. 402 means add API credits; 403 means a scope or entitlement is missing.
+
+## Scenes (multi-character dialogue)
+
+Use `multix scene` when a script has several speakers who must keep the same voice across lines and scenes. For one voice reading one text, use the provider's TTS command instead. A project is a local directory (`--project <dir>`, default `.`); scene commands are not available through the remote MCP server.
+
+```bash
+multix scene voice add <id> --provider gemini|openai|elevenlabs --model <tts-model> --voice <voice> [--language vi-VN] [--style "..."] [--setting key=value] [--alias NAME]
+multix scene voice validate
+multix scene plan scripts/s01.txt [scripts/s02.txt ...] --json   # local, free: to_render, to_render_chars, invalidated
+multix scene render --dry-run --json                             # local checks + key preflight, shows the first request
+multix scene render --json [--scene s01] [--line s01/002] [--limit <n>] [--keep-going]
+multix scene status --lines --json
+multix scene approve s01/001 [--take <takeId>]   |   multix scene reject s01/002 --take <takeId>
+multix scene export --out stems [--approved-only] [--allow-missing]
+```
+
+- Script lines: `SPEAKER: text` or `SPEAKER (direction): text`; `# scene: <id>`, `# title: ...`; other lines continue the line above. The speaker matches a profile id, `--name` or `--alias`, ignoring case.
+- Run `plan` and then `render --dry-run` before the first paid render. They reject unsupported markup (SSML, `[audio tags]`, `(direction)` on models without style) and missing keys before any request is billed.
+- `render` sends one request per uncached line and never retries. On a failure it records the error and stops (or continues with `--keep-going`), then exits non-zero. Do not re-run it in a loop: read `failed[]`, fix the cause, then re-render; only failed and pending lines are sent again. `--new-take --line <id>` pays for a new variant.
+- Editing one line re-renders only that line, plus its neighbours for profiles with `--context`. Per-take `usage.cost_usd`/`credits` are `null` when the provider reported nothing; `plan.estimated_cost_usd` is always `null`, `--estimate` reports unknown and `--max-cost` refuses (`BUDGET_UNPROVEN`): scene has no estimator.
+- Profiles never hold keys. A cloned voice needs `--cloned --consent-by <name>`. Model limits table: <https://multix.zuey.me/commands/scene/>.
 
 ## Image-to-image (edit existing image with a prompt)
 
