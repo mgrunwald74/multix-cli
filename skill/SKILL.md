@@ -419,6 +419,7 @@ multix openrouter speech-models [--model <id>]       # live model list / one mod
 multix openrouter generation <generation-id>         # cost, if it was not reported yet
 # Eleven v4 (quality) / v4 Turbo (low latency, 0.5 credits/char): 90+ languages, [audio tags], 10k chars.
 # No --style on v4/v3/Flash (rejected, not ignored); v3 rejects --previous-text/--next-text.
+# --clone-strength 0..1 only on v4/v4 Turbo (PVC fine-tuned for v4); multilingual_v2 ignores --language-code (warned).
 multix elevenlabs tts --model eleven_v4 --text "[warmly] Xin chào!" --language-code vi [--timestamps]
 multix elevenlabs models   # live capabilities per model
 
