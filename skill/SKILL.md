@@ -10,11 +10,14 @@ version: 1.19.0 # x-release-please-version
 
 ```bash
 multix models --task <task> --ready     # command + default model per task, key set or not
+multix models --model <id>              # verified model: inputs, voices, formats, example; else verified null
+multix models --task <task> --live      # + models fal/OpenRouter catalogs list now, marked verified or not
 multix <group> <cmd> ... --dry-run      # free: local checks, then shows the request instead of sending it
 multix <group> <cmd> ... --json         # stdout = ONE line, schema multix.result/v1
 ```
 
 - Tasks: image, image-edit, video, image-to-video, video-edit, speech, transcription, music, sfx, voice, 3d, analysis, document, avatar-video, any. `multix guide` prints the protocol for the installed version.
+- Models: only ids in the verified registry have known inputs; `any_model: true` rows (`fal run`, `replicate run`, OpenRouter, Atlas) pass any id through unverified (`model_scope` says which). Speech through fal: the `fal tts` row (typed, checked flags) and the `fal run` row (MiniMax) list their `verified_models`; copy a model's `example`. `--live` rows carry `verified` and `listed` (true/false, null = catalog unread or `truncated`); `status: "missing"` = verified model the catalog dropped (removed or renamed); a `sources[]` entry with `state: "unavailable"` (offline, no cache) confirms nothing. Cache `~/.multix/cache/models`, 1 day (`--refresh`, `MULTIX_CACHE_DIR`, `MULTIX_MODELS_TTL` up to 7 days).
 - Success = `ok: true` AND `outputs[]` non-empty (path, bytes, mime, sha256, width/height, duration_s) AND no `warnings` (`EMPTY_OUTPUT`, `CONTENT_MISMATCH`, `UNREADABLE_MEDIA`).
 - Failure: read `error.code`, `error.hint`, `next[]`. Exit codes (with `--json`; plain runs exit 1): 2 fix flags/input · 3 key/setup (`multix check`, key named in `error.env`) · 4 temporary (wait `retry_after_s`, `multix rerun <history_id>`) · 5 rejected: quota, safety, model (change input/provider) · 6 timed out, job may still run (status command in `next[]`, do not resubmit) · 1 unknown (`log[]`).
 - `usage` = what the provider reported (tokens, `cost_usd`, `credits`, metrics; `sources` names the header/body field each money number came from); `history_id` names the run.
@@ -170,7 +173,7 @@ multix fal status <model> <requestId>
 multix fal result <model> <requestId> [--download] [--output-dir <dir>] [--format <fmt>]   # --format for raw speech formats; detach receipts include it
 ```
 
-`--detach` leaves a receipt in `~/.multix/fal/requests/` (or at `--receipt <path>`, which also works without `--detach`; mode 0600, no input or key). `status`/`result` never resubmit, so resume a detached or timed-out job with them instead of running `fal run` again. `UNKNOWN_REMOTE_STATE` means fal may or may not have queued the submit (connection cut off, 5xx gateway error): check https://fal.ai/dashboard/requests before resubmitting. `fal tts` refuses a flag the model has no field for (`--style` on ElevenLabs, `--format` on Gemini) and a voice or format outside the model's list, before sending. It saves `fal-<id>-01.<ext>` with the extension taken from the bytes (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the format) and refuses empty, error-page or mislabelled audio; `--detach` and `fal result --download` work as for `run`. `--file`/`fal upload` take image, video and audio only (`FAL_MAX_UPLOAD_MB`, default 1024); the uploaded URL is public to anyone with the link.
+`--detach` leaves a receipt in `~/.multix/fal/requests/` (or at `--receipt <path>`, which also works without `--detach`; mode 0600, no input or key). `status`/`result` never resubmit, so resume a detached or timed-out job with them instead of running `fal run` again. `UNKNOWN_REMOTE_STATE` means fal may or may not have queued the submit (connection cut off, 5xx gateway error): check https://fal.ai/dashboard/requests before resubmitting. `fal tts` refuses a flag the model has no field for (`--style` on ElevenLabs, `--format` on Gemini) and a voice or format outside the model's list, before sending. It saves `fal-<id>-01.<ext>` with the extension taken from the bytes (raw `pcm_*`/`ulaw_8000`/`alaw_8000` from the format) and refuses empty, error-page or mislabelled audio; `--detach` and `fal result --download` work as for `run`. `--file`/`fal upload` take image, video and audio only (`FAL_MAX_UPLOAD_MB`, default 1024); the uploaded URL is public to anyone with the link. For a verified model (`multix models --model <id>`), `fal run` warns about `--input` fields it does not take, required ones that are missing and values outside its listed choices; it still submits.
 
 ## Atlas Cloud
 
