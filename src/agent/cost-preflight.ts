@@ -23,6 +23,9 @@ import { getDefaultModel } from "../providers/gemini/models.js";
 import { probeDuration } from "./output-file-inspect.js";
 import { run } from "./run-state.js";
 
+/** Same limit as `speech generate` applies when it reads --text-file. */
+const MAX_SPEECH_TEXT_FILE_BYTES = 1024 * 1024;
+
 export interface BudgetCheck {
   ok: boolean;
   max_cost_usd: number;
@@ -38,12 +41,33 @@ function localAudioSeconds(input: unknown): number | undefined {
   return probeDuration(input);
 }
 
+/** The text `speech generate --text-file` will speak; unreadable or oversized files stay unpriced. */
+function textFileContent(path: unknown): string | undefined {
+  if (typeof path !== "string") return undefined;
+  try {
+    const stat = fs.statSync(path);
+    if (!stat.isFile() || stat.size > MAX_SPEECH_TEXT_FILE_BYTES) return undefined;
+    const text = fs.readFileSync(path, "utf8");
+    run.textFile = { path, text };
+    return text;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Defaults a command resolves at run time (env overrides, file probes), not in commander. */
 function runtimeDefaults(command: string, options: Record<string, unknown>): CommandDefaults {
   if (command === "gemini generate-speech") return { model: getDefaultModel("generate-speech") };
   if (command === "openrouter transcribe") {
     const audioSeconds = localAudioSeconds(options.input);
     return audioSeconds !== undefined ? { audioSeconds } : {};
+  }
+  if (command === "speech generate") {
+    const text = options.text === undefined ? textFileContent(options.textFile) : undefined;
+    return {
+      speechModels: { gemini: getDefaultModel("generate-speech") },
+      ...(text !== undefined ? { text } : {}),
+    };
   }
   return {};
 }

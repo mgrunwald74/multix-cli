@@ -129,6 +129,7 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | `elevenlabs tts` | Ký tự (Unicode code point đúng như khi gửi) | Đã chứng minh. `--previous-text` và `--next-text` chỉ được tính vào mức cao. |
 | `openrouter tts` | Giá OpenRouter của model: ký tự với đa số model, byte UTF-8 với Fish Audio, token với Gemini TTS, giây âm thanh đầu ra với Seed Audio | Đã chứng minh với giá theo ký tự và byte (`--instructions` chỉ được tính vào mức cao); ước tính với giá theo token và theo giây đầu ra. Văn bản phải truyền qua `--text`. |
 | `openrouter transcribe` | Số giây âm thanh đầu vào, đo bằng `ffprobe` từ file `--input` cục bộ | Đã chứng minh. Mức cao cộng thêm 5% vào độ dài đo được và làm tròn lên tròn phút. Đầu vào là URL, file mà `ffprobe` không đọc được, hoặc model tính giá theo token sẽ là `unknown`. |
+| `speech generate` | Giá của từng route, tính như `gemini generate-speech` hoặc `elevenlabs tts`; văn bản từ `--text` hoặc `--text-file` | Như provider đó. Với Gemini, `--style` được tính vào mức cao; với ElevenLabs, `--extra elevenlabs.previous_text`/`next_text` được tính vào mức cao. Kế hoạch có `--fallback` được tính theo route đắt nhất và chỉ được chứng minh khi mọi route đều được chứng minh. Một route trên provider khác (OpenAI, MiniMax, Atlas) hoặc model ElevenLabs chưa có giá (`eleven_v3_conversational`) khiến cả lần chạy là `unknown`. Qua MCP, `text-file` không được tính giá. |
 
 Mọi lệnh hoặc model khác có trạng thái ước tính `unknown`, không bao giờ là $0,
 và `--max-cost` từ chối chạy.
