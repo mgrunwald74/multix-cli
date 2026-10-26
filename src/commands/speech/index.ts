@@ -271,7 +271,9 @@ function modelRow(m: SpeechModel, defaults: Map<SpeechProvider, string>) {
     async: m.async,
     voice: {
       kind: info.voice_kind,
-      ...(info.default_voice ? { default: info.default_voice } : {}),
+      ...((m.default_voice ?? info.default_voice)
+        ? { default: m.default_voice ?? info.default_voice }
+        : {}),
       ...(info.voices_command ? { list: info.voices_command } : {}),
     },
     ...(Object.keys(info.extras).length

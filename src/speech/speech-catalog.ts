@@ -34,6 +34,8 @@ export interface SpeechModel {
   style: boolean;
   /** Named emotions (`--emotion`); absent: no emotion parameter. */
   emotions?: readonly string[];
+  /** Voice used when none is given, when it differs from the provider's default. */
+  default_voice?: string;
   /** Voices in one request: 1, or more for multi-speaker dialogue (`--speaker`). */
   max_speakers: number;
   /** Submit-and-return (`--async`) with a resume command. */
@@ -226,6 +228,8 @@ const OPENAI_MODELS: readonly SpeechModel[] = ["gpt-4o-mini-tts", "tts-1", "tts-
     languages: OPENAI_LANGUAGES,
     formats: ["mp3", "opus", "aac", "flac", "wav", "pcm"],
     style: model === "gpt-4o-mini-tts",
+    // tts-1 and tts-1-hd take only the nine original voices.
+    ...(model === "gpt-4o-mini-tts" ? {} : { default_voice: "alloy" }),
     max_speakers: 1,
     async: false,
     source: OPENAI_SOURCE,

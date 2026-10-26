@@ -184,7 +184,7 @@ export function voiceProblem(
     }
     case "elevenlabs":
       // Voice ids are opaque, so only a name that belongs to another provider is rejected.
-      return voice in ELEVENLABS_RECOMMENDED_VOICES ||
+      return Object.hasOwn(ELEVENLABS_RECOMMENDED_VOICES, voice) ||
         elsewhere() === "" ||
         /^[A-Za-z0-9]{20}$/.test(voice)
         ? undefined
@@ -201,7 +201,7 @@ export function voiceProblem(
 
 /** ElevenLabs accepts the recommended voice names as a shorthand for their ids. */
 function canonicalVoice(provider: SpeechProvider, voice: string): string {
-  if (provider === "elevenlabs" && voice in ELEVENLABS_RECOMMENDED_VOICES) {
+  if (provider === "elevenlabs" && Object.hasOwn(ELEVENLABS_RECOMMENDED_VOICES, voice)) {
     return ELEVENLABS_RECOMMENDED_VOICES[voice as keyof typeof ELEVENLABS_RECOMMENDED_VOICES];
   }
   return voice;
@@ -277,7 +277,9 @@ export function buildRoute(
   }
   const requested = target.voice ?? input.voice;
   // Atlas has no default voice: its models pick one when none is sent.
-  const voice = multi ? undefined : canonicalVoice(provider, requested ?? info.default_voice);
+  const voice = multi
+    ? undefined
+    : canonicalVoice(provider, requested ?? capability.default_voice ?? info.default_voice);
   for (const v of multi ? input.speakers.map((s) => s.voice) : voice ? [voice] : []) {
     const problem = voiceProblem(provider, model, v);
     if (problem) problems.push(problem);
@@ -387,6 +389,12 @@ export function resolveFormat(
     throw new ValidationError(`--format must be one of: ${SPEECH_FORMATS.join(", ")}`);
   }
   const fromOutput = formatFromOutput(output);
+  const ext = output?.match(/\.([A-Za-z0-9]+)$/)?.[1];
+  if (ext && !fromOutput) {
+    throw new ValidationError(
+      `--output ${output}: .${ext} is not an audio container multix speech writes (${SPEECH_FORMATS.join(", ")})`,
+    );
+  }
   if (format && fromOutput && format !== fromOutput) {
     throw new ValidationError(
       `--format ${format} does not match --output ${output}; use a .${format} file name`,
