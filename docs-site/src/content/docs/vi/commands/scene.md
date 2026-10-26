@@ -192,7 +192,7 @@ danh sách model, giọng và format lấy từ file model của từng provider
   khoảng trắng, và không bao giờ tách bên trong tag `<…>` hay `[…]`. Tag luôn đi
   cùng từ đứng sau nó, hoặc từ đứng trước nó nếu ở cuối câu, nên không bao giờ
   bị gửi thành một request riêng. `plan` từ chối phần nào chứa tag chưa đóng,
-  tag dài hơn giới hạn, hoặc chỉ có tag mà không có lời thoại.
+  tag dài hơn giới hạn, hoặc không có lời thoại (chỉ có tag hoặc dấu câu).
 - `--language` được lưu trong mọi profile nhưng chỉ được gửi tới các model ở cột
   "Gửi ngôn ngữ", dưới dạng subtag chính (`vi-VN` được gửi là
   `language_code: vi`). `eleven_multilingual_v2` không áp dụng language code,

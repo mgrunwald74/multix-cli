@@ -483,7 +483,7 @@ describe("scene scripts", () => {
     ]);
     const long = `[${"x".repeat(30)}]`;
     expect(partErrors(`ok then. ${long}`, chunkText(`ok then. ${long}`, 20), 20)).toEqual([
-      expect.stringContaining("part 2: has only tags and no spoken text"),
+      expect.stringContaining("part 2: has no spoken text"),
       expect.stringContaining("part 2: 32 characters, over the limit of 20"),
     ]);
     expect(
@@ -511,9 +511,28 @@ describe("scene scripts", () => {
     const parts = chunkText("[sighs heavily and slowly] Fine.", 30);
     expect(parts).toEqual(["[sighs heavily and slowly]", "Fine."]);
     expect(partErrors("[sighs heavily and slowly] Fine.", parts, 30)).toEqual([
-      expect.stringContaining("part 1: has only tags and no spoken text"),
+      expect.stringContaining("part 1: has no spoken text"),
     ]);
     expect(partErrors("[laughs]", ["[laughs]"], 30)).toEqual([]);
+    // When the tag fits with the part before it, it goes there instead.
+    expect(chunkText("ab. [sighs heavily and slowly] Fine.", 30)).toEqual([
+      "ab. [sighs heavily and slowly]",
+      "Fine.",
+    ]);
+  });
+
+  it("keeps tags and punctuation with spoken text in unspaced CJK lines", () => {
+    const jp = "[sighs]今日はとても疲れたので早く帰りたいと思います。";
+    expect(chunkText(jp, 20)).toEqual([
+      "[sighs]今日はとても疲れたので早く",
+      "帰りたいと思います。",
+    ]);
+    expect(partErrors(jp, chunkText(jp, 20), 20)).toEqual([]);
+    const stop = "今日はとても疲れたので早く帰りたいと思い。";
+    expect(chunkText(stop, 20)).toEqual(["今日はとても疲れたので早く帰りたいと思", "い。"]);
+    expect(partErrors(stop, chunkText(stop, 20), 20)).toEqual([]);
+    const glued = `x [laughs]${"y".repeat(30)}`;
+    expect(chunkText(glued, 20)[0]).toBe(`x [laughs]${"y".repeat(10)}`);
   });
 
   it("keeps a v3 audio tag with its sentence when a line is split in the plan", () => {
@@ -526,7 +545,7 @@ describe("scene scripts", () => {
   it("rejects a split that would send a tag with no spoken text", () => {
     writeProfile(tmp, { ...MAI, model: "eleven_v3", settings: {}, max_chars: 30 });
     writeScripts({ "s03.txt": "MAI: [sighs heavily and slowly] Fine. We will go at 3.5 past.\n" });
-    expect(() => plan()).toThrow(/part 1: has only tags and no spoken text/);
+    expect(() => plan()).toThrow(/part 1: has no spoken text/);
   });
 
   it("splits an over-long line into numbered parts in the manifest", () => {

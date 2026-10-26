@@ -17,6 +17,7 @@ import {
   SCENE_ID,
   charCount,
   chunkText,
+  hasSpokenText,
   markupIn,
   parseScript,
   unclosedMarkup,
@@ -270,9 +271,9 @@ export function partErrors(text: string, parts: string[], limit: number): string
   parts.forEach((part, i) => {
     const open = unclosedMarkup(part);
     if (open.length) errors.push(`${label(i)}unclosed tag ${open.join(" ")} would be read aloud`);
-    if (parts.length > 1 && !/[\p{L}\p{N}]/u.test(part.replace(/<[^<>]*>|\[[^[\]]*\]/gu, ""))) {
+    if (parts.length > 1 && !hasSpokenText(part)) {
       errors.push(
-        `${label(i)}has only tags and no spoken text; shorten the line or raise max_chars`,
+        `${label(i)}has no spoken text, only tags or punctuation; shorten the line or raise max_chars`,
       );
     }
     const n = charCount(part);

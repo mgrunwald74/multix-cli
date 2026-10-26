@@ -190,11 +190,48 @@ function wordsOf(sentence: Token[]): Token[][] {
 
 const joined = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 
+/** True when `text` has words to speak once its tags are removed. */
+export function hasSpokenText(text: string): boolean {
+  return /[\p{L}\p{N}]/u.test(text.replace(/<[^<>]*>|\[[^[\]]*\]/gu, ""));
+}
+
+/**
+ * Join each part with no spoken text (tags or punctuation alone) to the part
+ * before or after it when the two fit the limit together. Parts are trimmed
+ * slices of `text` in order, so a join takes the exact text between them.
+ */
+function joinBareParts(text: string, parts: string[], maxChars: number): string[] {
+  let at = 0;
+  const spans = parts.map((p) => {
+    const start = text.indexOf(p, at);
+    at = start + p.length;
+    return [start, at] as [number, number];
+  });
+  const slice = ([a, b]: [number, number]) => text.slice(a, b);
+  for (let i = 0; i < spans.length; i++) {
+    const span = spans[i] as [number, number];
+    if (hasSpokenText(slice(span))) continue;
+    for (const j of [i - 1, i + 1]) {
+      const other = spans[j];
+      if (!other) continue;
+      const joinedSpan: [number, number] = [
+        Math.min(span[0], other[0]),
+        Math.max(span[1], other[1]),
+      ];
+      if (charCount(slice(joinedSpan)) > maxChars) continue;
+      spans.splice(Math.min(i, j), 2, joinedSpan);
+      i = Math.min(i, j) - 1;
+      break;
+    }
+  }
+  return spans.map(slice);
+}
+
 /**
  * Split `text` into parts of at most `maxChars` code points, at sentence,
  * then word boundaries, keeping each tag with a neighbouring word. Tags are
  * never cut: only when a tag and its word together exceed the limit can a
- * tag end up in a part with no spoken text, which partErrors rejects.
+ * part be left with no spoken text, which partErrors rejects.
  */
 export function chunkText(text: string, maxChars: number): string[] {
   if (charCount(text) <= maxChars) return [text];
@@ -213,11 +250,23 @@ export function chunkText(text: string, maxChars: number): string[] {
     length += n;
     return true;
   };
-  const addOrStart = (piece: string) => {
-    if (add(piece)) return;
+  const start = (piece: string) => {
     push();
     current = piece;
     length = charCount(piece);
+  };
+  // A new part never starts with bare punctuation: the last spoken character
+  // of the current part moves over with it.
+  const startText = (piece: string) => {
+    const kept = Array.from(current);
+    const carry = !hasSpokenText(piece) && kept.length > 1 && hasSpokenText(kept.at(-1) ?? "");
+    const moved = carry ? (kept.pop() ?? "") : "";
+    current = kept.join("");
+    start(moved + piece);
+  };
+  // Cut text by code point, continuing the current part.
+  const cut = (piece: string) => {
+    for (const ch of Array.from(piece)) if (!add(ch)) startText(ch);
   };
   for (const sentence of sentencesOf(tokenize(text))) {
     if (add(joined(sentence))) continue;
@@ -230,23 +279,22 @@ export function chunkText(text: string, maxChars: number): string[] {
         continue;
       }
       if (charCount(joined(word)) <= maxChars) {
-        push();
-        add(joined(word));
+        start(joined(word));
         continue;
       }
-      // A word (with its tags) longer than the limit: split it between its
-      // tokens, and cut a token's text by code point only if it alone is too long.
+      // A word (with its tags) longer than the limit: lay out its tokens in
+      // turn, cutting a token's text in place when it alone is too long.
       for (const t of word) {
         if (add(t.text)) continue;
-        push();
-        if (t.space || add(t.text)) continue;
-        if (t.tag) addOrStart(t.text);
-        else for (const ch of Array.from(t.text)) addOrStart(ch);
+        if (t.space) push();
+        else if (t.tag) start(t.text);
+        else if (charCount(t.text) > maxChars) cut(t.text);
+        else startText(t.text);
       }
     }
   }
   push();
-  return parts;
+  return joinBareParts(text, parts, maxChars);
 }
 
 /**
