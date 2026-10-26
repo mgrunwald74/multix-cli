@@ -128,19 +128,35 @@ function tokenize(text: string): Token[] {
 
 /** True when a run has spoken text, not only tags, spaces and punctuation. */
 const spoken = (run: Token[]) => run.some((t) => !t.tag && /[\p{L}\p{N}]/u.test(t.text));
-const tagOnly = (run: Token[]) => !spoken(run) && run.some((t) => t.tag);
+/** Index of the last run with spoken text, or -1. */
+const lastSpokenIn = (runs: Token[][]) => {
+  let i = runs.length - 1;
+  while (i >= 0 && !spoken(runs[i] ?? [])) i--;
+  return i;
+};
 
 /**
- * Join runs with no spoken text to the next run that has some, or, at the
- * end, to the last one before them: a tag is never split from the words it
- * shapes, so it never becomes a request of its own.
+ * Keep runs with no spoken text next to runs that have some, so a split
+ * never sends them as a request of their own. Bare punctuation (`?` in
+ * French spacing, `...`) joins the run before it; a tag, or punctuation with
+ * nothing spoken before it, joins the next spoken run, or at the end the
+ * last one before it.
  */
 function attachTags(runs: Token[][]): Token[][] {
   const out: Token[][] = [];
   let pending: Token[] = [];
+  const joinBack = (tokens: Token[]) => {
+    const tail = out.splice(lastSpokenIn(out)).flat();
+    out.push([...tail, ...tokens]);
+  };
   for (const run of runs) {
-    if (!pending.length && !tagOnly(run)) {
+    const bare = !spoken(run) && !run[0]?.space;
+    if (!pending.length && !bare) {
       out.push(run);
+      continue;
+    }
+    if (!pending.length && !run.some((t) => t.tag) && lastSpokenIn(out) >= 0) {
+      joinBack(run);
       continue;
     }
     pending.push(...run);
@@ -150,12 +166,9 @@ function attachTags(runs: Token[][]): Token[][] {
     }
   }
   if (!pending.length) return out;
-  // Trailing tags: join them, and the spaces before them, to the last spoken run.
-  let lastSpoken = out.length - 1;
-  while (lastSpoken >= 0 && !spoken(out[lastSpoken] ?? [])) lastSpoken--;
-  if (lastSpoken < 0) return [...out, pending];
-  const tail = out.splice(lastSpoken).flat();
-  return [...out, [...tail, ...pending]];
+  if (lastSpokenIn(out) < 0) return [...out, pending];
+  joinBack(pending);
+  return out;
 }
 
 /** Sentences as token runs; a sentence keeps the space that follows it. */
@@ -195,9 +208,15 @@ export function hasSpokenText(text: string): boolean {
   return /[\p{L}\p{N}]/u.test(text.replace(/<[^<>]*>|\[[^[\]]*\]/gu, ""));
 }
 
+const TAG_BODY = "\u0001";
+/** `s` with each tag's characters after the first replaced by TAG_BODY, same length. */
+const maskTags = (s: string) =>
+  s.replace(/<[^<>]*>|\[[^[\]]*\]/gu, (m) => `\u0002${TAG_BODY.repeat(m.length - 1)}`);
+
 /**
- * Join each part with no spoken text (tags or punctuation alone) to the part
- * before or after it when the two fit the limit together. Parts are trimmed
+ * Give each part with no spoken text (tags or punctuation alone) words to go
+ * with: join it to the part before or after it when the two fit the limit,
+ * or else move the end of the part before into it. Parts are trimmed
  * slices of `text` in order, so a join takes the exact text between them.
  */
 function joinBareParts(text: string, parts: string[], maxChars: number): string[] {
@@ -208,20 +227,40 @@ function joinBareParts(text: string, parts: string[], maxChars: number): string[
     return [start, at] as [number, number];
   });
   const slice = ([a, b]: [number, number]) => text.slice(a, b);
+  const fits = (span: [number, number]) => charCount(slice(span)) <= maxChars;
   for (let i = 0; i < spans.length; i++) {
     const span = spans[i] as [number, number];
     if (hasSpokenText(slice(span))) continue;
-    for (const j of [i - 1, i + 1]) {
-      const other = spans[j];
-      if (!other) continue;
-      const joinedSpan: [number, number] = [
-        Math.min(span[0], other[0]),
-        Math.max(span[1], other[1]),
-      ];
-      if (charCount(slice(joinedSpan)) > maxChars) continue;
-      spans.splice(Math.min(i, j), 2, joinedSpan);
-      i = Math.min(i, j) - 1;
-      break;
+    const before = spans[i - 1];
+    const after = spans[i + 1];
+    if (before && fits([before[0], span[1]])) {
+      spans.splice(i - 1, 2, [before[0], span[1]]);
+      i -= 2;
+    } else if (after && fits([span[0], after[1]])) {
+      spans.splice(i, 2, [span[0], after[1]]);
+      i -= 1;
+    } else if (before) {
+      // The last word, or for a part cut by code point (no space in it), its
+      // last spoken character; never from inside a tag.
+      const prev = slice(before);
+      const masked = maskTags(prev);
+      const space = masked.search(/\s\S*$/u);
+      let from = space + 1;
+      if (space < 0) {
+        from = -1;
+        for (let k = prev.length - 1; k > 0; k--) {
+          if (masked[k] === TAG_BODY || /[\uDC00-\uDFFF]/u.test(masked[k] ?? "")) continue;
+          if (/[\p{L}\p{N}]/u.test(masked.slice(k))) {
+            from = k;
+            break;
+          }
+        }
+        if (from < 0) continue;
+      }
+      const kept: [number, number] = [before[0], before[0] + prev.slice(0, from).trimEnd().length];
+      const moved: [number, number] = [before[0] + from, span[1]];
+      if (!fits(moved) || !hasSpokenText(slice(kept))) continue;
+      spans.splice(i - 1, 2, kept, moved);
     }
   }
   return spans.map(slice);
@@ -256,10 +295,13 @@ export function chunkText(text: string, maxChars: number): string[] {
     length = charCount(piece);
   };
   // A new part never starts with bare punctuation: the last spoken character
-  // of the current part moves over with it.
+  // of the current part moves over with it, unless it is the only one.
   const startText = (piece: string) => {
     const kept = Array.from(current);
-    const carry = !hasSpokenText(piece) && kept.length > 1 && hasSpokenText(kept.at(-1) ?? "");
+    const carry =
+      !hasSpokenText(piece) &&
+      hasSpokenText(kept.at(-1) ?? "") &&
+      hasSpokenText(kept.slice(0, -1).join(""));
     const moved = carry ? (kept.pop() ?? "") : "";
     current = kept.join("");
     start(moved + piece);
@@ -288,7 +330,10 @@ export function chunkText(text: string, maxChars: number): string[] {
         if (add(t.text)) continue;
         if (t.space) push();
         else if (t.tag) start(t.text);
-        else if (charCount(t.text) > maxChars) cut(t.text);
+        // Text glued to a part of only tags continues that part (unspaced
+        // scripts such as Japanese), so the tags are not left alone.
+        else if (charCount(t.text) > maxChars || (!hasSpokenText(current) && !/\s$/u.test(current)))
+          cut(t.text);
         else startText(t.text);
       }
     }

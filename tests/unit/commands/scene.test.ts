@@ -531,6 +531,25 @@ describe("scene scripts", () => {
     const stop = "今日はとても疲れたので早く帰りたいと思い。";
     expect(chunkText(stop, 20)).toEqual(["今日はとても疲れたので早く帰りたいと思", "い。"]);
     expect(partErrors(stop, chunkText(stop, 20), 20)).toEqual([]);
+    for (const [line, max, parts] of [
+      [
+        "[sighs]今日はとても疲れたので早く帰りたい。",
+        20,
+        ["[sighs]今日はとても疲れたので早く", "帰りたい。"],
+      ],
+      ["[whispering softly]嘘。本当だよ。", 20, ["[whispering softly]嘘", "。本当だよ。"]],
+      ["Tu es vraiment sûrs ?", 20, ["Tu es vraiment", "sûrs ?"]],
+      ["I was going to say ...", 20, ["I was going to", "say ..."]],
+    ] as const) {
+      expect(chunkText(line, max)).toEqual(parts);
+      expect(partErrors(line, [...parts], max)).toEqual([]);
+    }
+    // Moving words into a part of only tags never cuts inside a tag.
+    const line = 'we — [sighs] [whispering softly]go[whispering softly] sûrs ?<break time="1s"/>';
+    for (const max of [20, 30, 43])
+      expect(partErrors(line, chunkText(line, max), max)).not.toContainEqual(
+        expect.stringContaining("unclosed"),
+      );
     const glued = `x [laughs]${"y".repeat(30)}`;
     expect(chunkText(glued, 20)[0]).toBe(`x [laughs]${"y".repeat(10)}`);
   });

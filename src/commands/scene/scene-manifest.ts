@@ -281,11 +281,13 @@ export function partErrors(text: string, parts: string[], limit: number): string
       errors.push(`${label(i)}${n} characters, over the limit of ${limit} (a tag cannot be split)`);
     }
   });
+  // Compared as sorted lists: markupIn lists SSML before audio tags, so their
+  // order depends on where the line is split.
   const tags = (s: string) => {
     const m = markupIn(s);
-    return [...m.ssml, ...m.audioTags].join("\n");
+    return [...m.ssml, ...m.audioTags];
   };
-  if (parts.map(tags).filter(Boolean).join("\n") !== tags(text)) {
+  if (parts.flatMap(tags).sort().join("\n") !== tags(text).sort().join("\n")) {
     errors.push("splitting the line would change its tags; shorten it or raise max_chars");
   }
   return errors;
