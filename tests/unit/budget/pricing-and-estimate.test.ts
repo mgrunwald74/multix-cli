@@ -18,7 +18,9 @@ describe("pricing catalog", () => {
     for (const e of PRICING_CATALOG) {
       expect(e.verified).toBe(true);
       expect(e.last_checked).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(e.source).toMatch(/^https:\/\/(ai\.google\.dev|elevenlabs\.io|docs\.fish\.audio)\//);
+      expect(e.source).toMatch(
+        /^https:\/\/(ai\.google\.dev|elevenlabs\.io|docs\.fish\.audio|openrouter\.ai)\//,
+      );
       expect(e.windows.length).toBeGreaterThan(0);
     }
   });
@@ -138,6 +140,86 @@ describe("estimates", () => {
       { at: AT },
     );
     expect(flags.units).toEqual(mcp.units);
+  });
+});
+
+describe("OpenRouter speech estimates", () => {
+  it("prices TTS per input character with a proven ceiling; instructions only in the high end", () => {
+    const e = estimateCommand(
+      "openrouter tts",
+      { text: VI_NFC, instructions: "calm", model: "ElevenLabs/Eleven-V4" },
+      { at: AT },
+    );
+    expect(e).toMatchObject({
+      status: "estimated",
+      upper_bound: "proven",
+      provider: "openrouter",
+      model: "elevenlabs/eleven-v4",
+      rate: { id: "openrouter/elevenlabs/eleven-v4@api" },
+    });
+    expect(e.units.characters).toEqual({ low: 17, expected: 17, high: 21 });
+    expect(e.high_usd).toBeCloseTo((21 * 80) / 1e6, 9);
+  });
+
+  it("prices the default Gemini TTS model in tokens: ceiling only estimated", () => {
+    const e = estimateCommand("openrouter tts", { text: "hello" }, { at: AT });
+    expect(e).toMatchObject({
+      status: "estimated",
+      upper_bound: "estimated",
+      model: "google/gemini-3.8-flash-tts",
+    });
+    expect(e.units.output_audio_tokens).toBeDefined();
+  });
+
+  it("transcription with an exact duration is a proven per-second ceiling", () => {
+    const e = estimateCommand(
+      "openrouter transcribe",
+      { input: "talk.wav", model: "openai/whisper-1" },
+      { at: AT, audio: { seconds: 59.2, bytes: 1_894_444 } },
+    );
+    expect(e).toMatchObject({ status: "estimated", upper_bound: "proven" });
+    expect(e.units.input_audio_seconds).toEqual({ low: 60, expected: 60, high: 60 });
+    expect(e.high_usd).toBeCloseTo(60 * 0.0001, 9);
+  });
+
+  it("transcription sized only by bytes gives a range whose high end is an estimate", () => {
+    const e = estimateCommand(
+      "openrouter transcribe",
+      { input: "talk.mp3" },
+      { at: AT, audio: { bytes: 480_000 } },
+    );
+    expect(e).toMatchObject({
+      status: "estimated",
+      upper_bound: "estimated",
+      model: "openai/whisper-large-v3-turbo",
+    });
+    // 480 kB = 3.84 Mbit: 12 s at 320 kbps, 60 s at 64 kbps, 640 s at 6 kbps.
+    expect(e.units.input_audio_seconds).toEqual({ low: 12, expected: 60, high: 640 });
+    expect(() => checkBudget(e, 1, "strict")).toThrow(/not a proven cap/);
+    expect(() => checkBudget(e, 1, "estimate")).not.toThrow();
+  });
+
+  it("transcription without a measured local file, or of a token-priced model, is unknown", () => {
+    expect(
+      estimateCommand("openrouter transcribe", { input: "https://x/a.mp3" }, { at: AT }),
+    ).toMatchObject({ status: "unknown", reason: "missing_input" });
+    expect(
+      estimateCommand(
+        "openrouter transcribe",
+        { input: "a.wav", model: "openai/gpt-4o-transcribe" },
+        { at: AT, audio: { seconds: 3 } },
+      ),
+    ).toMatchObject({ status: "unknown", reason: "no_price" });
+  });
+
+  it("an OpenRouter TTS model billed per generated second is not priced", () => {
+    expect(
+      estimateCommand(
+        "openrouter tts",
+        { text: "hi", model: "bytedance-seed/seed-audio-1-0" },
+        { at: AT },
+      ),
+    ).toMatchObject({ status: "unknown", reason: "no_price" });
   });
 });
 

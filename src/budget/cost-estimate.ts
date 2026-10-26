@@ -1,7 +1,8 @@
 /**
  * Pre-flight cost estimates (runtime-neutral, no network). Counts the units a
  * provider bills (characters, UTF-8 bytes, text tokens, audio seconds/tokens)
- * from the request itself and prices them with the catalog. The result is a
+ * from the request itself (or, for speech-to-text, from what the caller
+ * measured of the audio file) and prices them with the catalog. The result is a
  * range with its provenance; `upper_bound` says whether the high end is a
  * proven ceiling (billed units are known up front) or only an estimate (the
  * provider bills output it has not produced yet, e.g. seconds of audio).
@@ -17,6 +18,11 @@ export interface TextUnits {
   utf8_bytes: number;
 }
 
+export interface AudioInput {
+  seconds?: number;
+  bytes?: number;
+}
+
 export interface UnitRange {
   low: number;
   expected: number;
@@ -30,6 +36,8 @@ export interface EstimateRequest {
   text: string;
   /** Text sent alongside that may be billed (context, style); counted in the high end only. */
   extra_text?: string[];
+  /** Audio to transcribe: its exact duration when the caller could read it, else its size. */
+  audio?: AudioInput;
   at?: Date;
 }
 
@@ -71,6 +79,13 @@ export const GEMINI_AUDIO_TOKENS_PER_SECOND = 25;
 const CHARS_PER_SECOND = { fast: 25, typical: 14, slow: 6 };
 /** Tokens the request adds around the text (voice config, turn markers). */
 const PROMPT_OVERHEAD_TOKENS = 64;
+/**
+ * Bitrate bounds (bits per second) for audio whose duration is not known:
+ * 6 kbps is the floor of speech codecs in practice (Opus voice), so the
+ * longest plausible duration; 64 kbps is typical speech mp3/m4a; 320 kbps
+ * the top of lossy formats.
+ */
+const AUDIO_BITRATE = { floor: 6_000, typical: 64_000, ceiling: 320_000 };
 
 const encoder = new TextEncoder();
 
@@ -126,6 +141,7 @@ function meterRanges(
   meters: Set<PriceMeter>,
   text: TextUnits,
   all: TextUnits,
+  audio: AudioInput | undefined,
   assumptions: string[],
 ): CostEstimate["units"] | undefined {
   const units: CostEstimate["units"] = {};
@@ -166,6 +182,25 @@ function meterRanges(
       `Audio length: ${CHARS_PER_SECOND.slow}-${CHARS_PER_SECOND.fast} characters per second of speech (typical ${CHARS_PER_SECOND.typical}); the model decides the real length, so the high end is not a hard cap.`,
     );
   }
+  if (meters.has("input_audio_seconds")) {
+    if (audio?.seconds !== undefined && audio.seconds >= 0) {
+      const billed = Math.max(1, Math.ceil(audio.seconds));
+      units.input_audio_seconds = { low: billed, expected: billed, high: billed };
+      assumptions.push(
+        "Audio length read from the file header; billed per second of audio, rounded up.",
+      );
+    } else if (audio?.bytes !== undefined && audio.bytes > 0) {
+      const sec = (bps: number) => Math.max(1, Math.ceil(((audio.bytes as number) * 8) / bps));
+      units.input_audio_seconds = {
+        low: sec(AUDIO_BITRATE.ceiling),
+        expected: sec(AUDIO_BITRATE.typical),
+        high: sec(AUDIO_BITRATE.floor),
+      };
+      assumptions.push(
+        `Audio length guessed from the file size at ${AUDIO_BITRATE.ceiling / 1000}-${AUDIO_BITRATE.floor / 1000} kbps (typical ${AUDIO_BITRATE.typical / 1000}); the provider bills the real length, so the high end is not a hard cap. A WAV file gives an exact length.`,
+      );
+    }
+  }
   for (const m of meters) if (!units[m]) return undefined;
   return units;
 }
@@ -180,7 +215,7 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
   const { rate } = lookup;
   const assumptions: string[] = [];
   const meters = new Set(rate.components.map((c) => c.meter));
-  const units = meterRanges(meters, text, all, assumptions);
+  const units = meterRanges(meters, text, all, req.audio, assumptions);
   if (!units) {
     return unknown(req, text, at, "unsupported", `Cannot count units for ${rate.id}`);
   }
@@ -203,7 +238,10 @@ export function estimateCost(req: EstimateRequest): CostEstimate {
   ) {
     assumptions.push("A price change is within a day: the high end uses the higher price.");
   }
-  const proven = !meters.has("output_audio_tokens") && !meters.has("input_text_tokens");
+  const proven =
+    !meters.has("output_audio_tokens") &&
+    !meters.has("input_text_tokens") &&
+    (!meters.has("input_audio_seconds") || req.audio?.seconds !== undefined);
   return {
     status: "estimated",
     currency: "USD",

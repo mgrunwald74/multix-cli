@@ -128,6 +128,8 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | --- | --- | --- |
 | `gemini generate-speech` | Text tokens in, audio tokens out (25 tokens per second of audio) | Estimated: the model decides the audio length, so `--max-cost` needs `--cost-policy estimate`. |
 | `elevenlabs tts` | Characters (Unicode code points as sent) | Proven. `--previous-text` and `--next-text` count only in the high end. |
+| `openrouter tts` | Characters at the OpenRouter list price; Gemini models in text tokens in and audio tokens out | Proven for character-priced models (`--instructions` counts only in the high end); estimated for Gemini models. Priced from `--text`/`--prompt` only: `--text-file` and `--turns-file` runs are `unknown`. Models billed per generated second (Seed Audio) are not priced. |
+| `openrouter transcribe` | Seconds of input audio at the OpenRouter list price | Proven for a local WAV file (exact length from its header, rounded up to the second). Other local files are sized by bytes at 6–320 kbps, so the ceiling is estimated and `--max-cost` needs `--cost-policy estimate`. A URL input, and token-priced models (`openai/gpt-4o-transcribe`, `google/gemini-3.5-transcribe`, ...), are `unknown`. Over MCP the file is not on the Worker, so it is `unknown`. |
 
 Any other command or model has estimate status `unknown`, never $0, and
 `--max-cost` refuses it.

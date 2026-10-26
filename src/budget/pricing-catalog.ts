@@ -8,7 +8,14 @@
  *
  * Audio is not billed by one formula: Gemini TTS bills text tokens in and audio
  * tokens out (25 tokens per second), ElevenLabs bills characters, Fish Audio
- * bills UTF-8 bytes. The meter names keep those units apart.
+ * bills UTF-8 bytes, speech-to-text bills seconds of input audio. The meter
+ * names keep those units apart.
+ *
+ * OpenRouter resells many speech models under its own ids ("openrouter"
+ * entries, priced from its models API): TTS `pricing.prompt` is USD per input
+ * character (Gemini models: per token, with audio tokens under `completion`),
+ * duration-billed STT `pricing.prompt` is USD per second of audio. Models
+ * billed per generated second or per STT token are left out (unknown).
  */
 
 export const PRICING_SCHEMA = "multix.pricing/v1";
@@ -22,7 +29,9 @@ export type PriceMeter =
   /** Characters of the text to speak (Unicode code points as sent). */
   | "characters"
   /** UTF-8 bytes of the text to speak. */
-  | "utf8_bytes";
+  | "utf8_bytes"
+  /** Seconds of audio sent for transcription. */
+  | "input_audio_seconds";
 
 export interface PriceComponent {
   meter: PriceMeter;
@@ -71,12 +80,148 @@ const ELEVENLABS_PRICING = "https://elevenlabs.io/pricing/api";
 const FISH_PRICING =
   "https://docs.fish.audio/developer-guide/models-pricing/pricing-and-rate-limits";
 
+const OPENROUTER_TTS_PRICING = "https://openrouter.ai/api/v1/models?output_modalities=speech";
+const OPENROUTER_STT_PRICING =
+  "https://openrouter.ai/api/v1/models?output_modalities=transcription";
+
 const perM = (meter: PriceMeter, usd: number): PriceComponent => ({ meter, usd, per: 1_000_000 });
 const perK = (meter: PriceMeter, usd: number): PriceComponent => ({ meter, usd, per: 1_000 });
 
 function geminiTts(input: number, output: number): PriceComponent[] {
   return [perM("input_text_tokens", input), perM("output_audio_tokens", output)];
 }
+
+/** Gemini's scheduled 2027 price change, mirrored for the same models on OpenRouter. */
+function geminiTtsWindows(input: number, output: number): PriceWindow[] {
+  return [
+    { until: "2027-01-01T00:00:00Z", label: "scheduled", components: geminiTts(input, output) },
+    { from: "2027-01-01T00:00:00Z", components: geminiTts(input * 2, output * 2) },
+  ];
+}
+
+const OPENROUTER_CHECKED = "2026-10-26";
+const OPENROUTER_NOTES =
+  "OpenRouter list price; BYOK requests are billed by the upstream provider plus OpenRouter's fee.";
+
+/** OpenRouter TTS models priced per input character: [id, USD per 1M characters]. */
+const OPENROUTER_TTS_PER_CHARACTER: [string, number][] = [
+  ["elevenlabs/eleven-v4", 80],
+  ["elevenlabs/eleven-v3", 80],
+  ["elevenlabs/eleven-multilingual-v2", 80],
+  ["elevenlabs/eleven-v4-turbo", 40],
+  ["elevenlabs/eleven-v3-conversational", 40],
+  ["elevenlabs/eleven-flash-v2.5", 40],
+  ["elevenlabs/eleven-flash-v2", 40],
+  ["elevenlabs/eleven-turbo-v2.5", 40],
+  ["elevenlabs/eleven-turbo-v2", 40],
+  ["fish-audio/drama-3", 2],
+  ["fish-audio/s1", 15],
+  ["fish-audio/s2-pro", 15],
+  ["fish-audio/s2.1-pro", 15],
+  ["mistralai/voxtral-mini-tts-3-0", 13],
+  ["mistralai/voxtral-mini-tts-2603", 16],
+  ["heygen/heygen-voice-1", 15],
+  ["heygen/heygen-voice-1-turbo", 4],
+  ["microsoft/mai-voice-2.1", 22],
+  ["microsoft/mai-voice-2.1-flash", 15],
+  ["microsoft/mai-voice-2", 22],
+  ["microsoft/mai-voice-2-flash", 15],
+  ["deepgram/flux-tts", 45],
+  ["deepgram/aura-2", 30],
+  ["qwen/qwen-audio-3.0-tts-flash", 15],
+  ["qwen/qwen-audio-3.0-tts-plus", 20],
+  ["minimax/speech-2.8-hd", 100],
+  ["minimax/speech-2.8-turbo", 60],
+  ["x-ai/grok-voice-tts-1.0", 15],
+  ["canopylabs/orpheus-3b-0.1-ft", 7],
+  ["sesame/csm-1b", 7],
+  ["hexgrad/kokoro-82m", 0.62],
+];
+
+/** OpenRouter STT models priced per second of audio: [id, USD per second, as listed]. */
+const OPENROUTER_STT_PER_SECOND: [string, number][] = [
+  ["openai/whisper-large-v3-turbo", 0.00000333],
+  ["openai/whisper-large-v3", 0.0000075],
+  ["openai/whisper-1", 0.0001],
+  ["openai/gpt-transcribe", 0.000075],
+  ["elevenlabs/scribe-v2", 0.0000611111111111],
+  ["elevenlabs/scribe-v2-medical", 0.0000611111111111],
+  ["mistralai/voxtral-small-transcribe-3-0", 0.0000666667],
+  ["mistralai/voxtral-mini-transcribe-3-0", 0.0000583333],
+  ["mistralai/voxtral-mini-transcribe", 0.00005],
+  ["mistralai/voxtral-small-24b-2507-stt", 0.00005],
+  ["mistralai/voxtral-mini-3b-2507", 0.0000166667],
+  ["assemblyai/universal-3-6-pro", 0.0000833333],
+  ["assemblyai/universal-3-5-pro", 0.0000833333],
+  ["fish-audio/transcribe-1", 0.0001],
+  ["fish-audio/transcribe-1-pro", 0.0001],
+  ["meta/muse-voice-transcribe-1.0", 0.00005],
+  ["nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b", 0.00000333],
+  ["nvidia/parakeet-tdt-0.6b-v3", 0.000025],
+  ["qwen/qwen3-asr-1.7b", 0.0000075],
+  ["qwen/qwen3-asr-0.6b", 0.00000333],
+  ["x-ai/grok-stt-1.0", 0.0000277777777778],
+  ["deepgram/nova-3", 0.0000716666666667],
+  ["google/chirp-3", 0.000266666666667],
+];
+
+function openrouterEntry(
+  id: string,
+  models: string[],
+  windows: PriceWindow[],
+  source: string,
+): PriceEntry {
+  return {
+    id: `openrouter/${id}@api`,
+    provider: "openrouter",
+    models,
+    tier: "api-usage",
+    currency: "USD",
+    region: "global",
+    windows,
+    last_checked: OPENROUTER_CHECKED,
+    source,
+    verified: true,
+    notes: OPENROUTER_NOTES,
+  };
+}
+
+const OPENROUTER_ENTRIES: PriceEntry[] = [
+  openrouterEntry(
+    "google/gemini-3.8-flash-tts",
+    ["google/gemini-3.8-flash-tts"],
+    geminiTtsWindows(0.5, 9),
+    OPENROUTER_TTS_PRICING,
+  ),
+  openrouterEntry(
+    "google/gemini-3.8-flash-lite-tts",
+    ["google/gemini-3.8-flash-lite-tts"],
+    geminiTtsWindows(0.5, 6),
+    OPENROUTER_TTS_PRICING,
+  ),
+  openrouterEntry(
+    "google/gemini-3.1-flash-tts-preview",
+    ["google/gemini-3.1-flash-tts-preview"],
+    [{ components: geminiTts(1, 20) }],
+    OPENROUTER_TTS_PRICING,
+  ),
+  ...OPENROUTER_TTS_PER_CHARACTER.map(([model, usd]) =>
+    openrouterEntry(
+      model,
+      [model],
+      [{ components: [perM("characters", usd)] }],
+      OPENROUTER_TTS_PRICING,
+    ),
+  ),
+  ...OPENROUTER_STT_PER_SECOND.map(([model, usd]) =>
+    openrouterEntry(
+      model,
+      [model],
+      [{ components: [{ meter: "input_audio_seconds", usd, per: 1 }] }],
+      OPENROUTER_STT_PRICING,
+    ),
+  ),
+];
 
 export const PRICING_CATALOG: PriceEntry[] = [
   {
@@ -223,6 +368,7 @@ export const PRICING_CATALOG: PriceEntry[] = [
     source: FISH_PRICING,
     verified: true,
   },
+  ...OPENROUTER_ENTRIES,
 ];
 
 export interface ResolvedRate {

@@ -202,7 +202,8 @@ async function readAudio(
       await reader.cancel().catch(() => {});
       throw err;
     } finally {
-      clearTimeout(timer);
+      // Workers types reject clearTimeout(undefined); the promise above always sets it.
+      if (timer !== undefined) clearTimeout(timer);
     }
     if (step.done) break;
     size += step.value.byteLength;

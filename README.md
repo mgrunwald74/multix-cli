@@ -71,9 +71,10 @@ The envelope lists `outputs` (path, bytes, MIME, SHA-256, dimensions, duration),
 metrics, and `sources` naming the header or body field each money number came
 from), `error` (`code`, `retryable`, `retry_after_s`, `hint`) and `next`
 commands, plus a `cost` receipt (`multix.cost/v1`: estimate, provider-reported
-and actual cost, variance; unknown stays `null`, never $0). Only
-`gemini generate-speech` and `elevenlabs tts` are priced so far; `--max-cost`
-refuses anything it cannot price. With `--json`, exit codes are `2` usage or
+and actual cost, variance; unknown stays `null`, never $0). Priced so
+far: `gemini generate-speech`, `elevenlabs tts`, `openrouter tts` and
+`openrouter transcribe` (per second of a local audio file; exact for WAV);
+`--max-cost` refuses anything it cannot price. With `--json`, exit codes are `2` usage or
 input (including a refused `--max-cost`), `3` key or setup, `4` temporary
 (retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
 `1` unknown; plain runs keep exit 1 and print the code and hint on

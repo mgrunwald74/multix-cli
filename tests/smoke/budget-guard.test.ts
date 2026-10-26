@@ -44,6 +44,7 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
       ...isolatedEnv(tmp),
       ELEVENLABS_API_KEY: "test-key-not-real",
       GEMINI_API_KEY: "test-key-not-real",
+      OPENROUTER_API_KEY: "test-key-not-real",
       MULTIX_HISTORY: "1",
       MULTIX_HISTORY_FILE: path.join(tmp, "h.jsonl"),
       // Any real request would fail fast instead of hanging.
@@ -76,6 +77,68 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(result.stdout).toContain("ai.google.dev/gemini-api/docs/pricing");
     expect(result.stdout).toContain("output_audio_tokens");
     expect(result.stdout).toContain("Nothing was sent; no provider was billed.");
+  });
+
+  it("prices OpenRouter transcription from a WAV's exact length and sends nothing", async () => {
+    // 2 s of 16 kHz mono 16-bit PCM.
+    const wav = Buffer.alloc(44 + 64_000);
+    wav.write("RIFF", 0, "ascii");
+    wav.writeUInt32LE(36 + 64_000, 4);
+    wav.write("WAVEfmt ", 8, "ascii");
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(16_000, 24);
+    wav.writeUInt32LE(32_000, 28);
+    wav.writeUInt16LE(2, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write("data", 36, "ascii");
+    wav.writeUInt32LE(64_000, 40);
+    fs.writeFileSync(path.join(tmp, "talk.wav"), wav);
+    const args = ["openrouter", "transcribe", "--input", "talk.wav", "--model", "openai/whisper-1"];
+    const est = await run([...args, "--estimate", "--max-cost", "0.01", "--json"]);
+    expect(est.exitCode).toBe(0);
+    const out = envelope(est.stdout);
+    expect(out.estimate).toMatchObject({
+      status: "estimated",
+      upper_bound: "proven",
+      provider: "openrouter",
+      model: "openai/whisper-1",
+      units: { input_audio_seconds: { low: 2, expected: 2, high: 2 } },
+      rate: { id: "openrouter/openai/whisper-1@api" },
+    });
+    expect(out.budget).toMatchObject({ ok: true, policy: "strict" });
+    const over = await run([...args, "--max-cost", "0.0001", "--json"]);
+    expect(over.exitCode).toBe(2);
+    expect(envelope(over.stdout).error.code).toBe("BUDGET_EXCEEDED");
+  });
+
+  it("an OpenRouter transcription sized only by bytes needs --cost-policy estimate", async () => {
+    fs.writeFileSync(path.join(tmp, "talk.mp3"), Buffer.alloc(48_000, 1));
+    const args = ["openrouter", "transcribe", "--input", "talk.mp3", "--max-cost", "1", "--json"];
+    const strict = await run(args);
+    expect(strict.exitCode).toBe(2);
+    expect(envelope(strict.stdout).error.code).toBe("BUDGET_UNPROVEN");
+    const est = await run([...args, "--cost-policy", "estimate", "--estimate"]);
+    expect(est.exitCode).toBe(0);
+    expect(envelope(est.stdout)).toMatchObject({
+      estimate: { status: "estimated", upper_bound: "estimated" },
+      budget: { ok: true, policy: "estimate" },
+    });
+  });
+
+  it("prices OpenRouter TTS per character and refuses a run over the limit", async () => {
+    const args = ["openrouter", "tts", "--text", VI, "--model", "elevenlabs/eleven-v4"];
+    const est = await run([...args, "--estimate", "--json"]);
+    expect(envelope(est.stdout).estimate).toMatchObject({
+      status: "estimated",
+      upper_bound: "proven",
+      units: { characters: { low: 17, expected: 17, high: 17 } },
+    });
+    const over = await run([...args, "--max-cost", "0.0001", "--json"]);
+    expect(over.exitCode).toBe(2);
+    expect(envelope(over.stdout).error.code).toBe("BUDGET_EXCEEDED");
+    expect(over.stdout + over.stderr).not.toContain("test-key-not-real");
   });
 
   it("--max-cost refuses an unknown price before any request", async () => {

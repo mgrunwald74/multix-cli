@@ -6,8 +6,11 @@
  * runtime-neutral (src/budget) and shared with the MCP Worker.
  */
 
+import fs from "node:fs";
+import { wavDurationSeconds } from "../budget/audio-duration.js";
 import {
   type CostPolicy,
+  type EstimateDefaults,
   checkBudget,
   estimateCommand,
   parseCostPolicy,
@@ -28,9 +31,35 @@ export interface BudgetCheck {
   message?: string;
 }
 
-/** Defaults a command resolves at run time (env overrides), not in commander. */
-function runtimeDefaults(command: string): { model?: string } {
+/** Bytes read from the start of an audio file to find a WAV header's data chunk. */
+const AUDIO_HEADER_BYTES = 64 * 1024;
+
+/**
+ * What a local audio file says about its length: the exact duration of a WAV,
+ * else only its size. URLs and unreadable paths give nothing (not priced).
+ */
+export function measureAudioFile(input: unknown): EstimateDefaults["audio"] {
+  if (typeof input !== "string" || /^https?:\/\//i.test(input)) return undefined;
+  let fd: number | undefined;
+  try {
+    const stat = fs.statSync(input);
+    if (!stat.isFile() || stat.size === 0) return undefined;
+    fd = fs.openSync(input, "r");
+    const header = new Uint8Array(Math.min(stat.size, AUDIO_HEADER_BYTES));
+    fs.readSync(fd, header, 0, header.length, 0);
+    const seconds = wavDurationSeconds(header, stat.size);
+    return seconds === undefined ? { bytes: stat.size } : { seconds, bytes: stat.size };
+  } catch {
+    return undefined;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+/** Defaults a command resolves at run time (env overrides, local files), not in commander. */
+function runtimeDefaults(command: string): EstimateDefaults {
   if (command === "gemini generate-speech") return { model: getDefaultModel("generate-speech") };
+  if (command === "openrouter transcribe") return { audio: measureAudioFile(run.options.input) };
   return {};
 }
 

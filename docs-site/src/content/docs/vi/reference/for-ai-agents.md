@@ -127,6 +127,8 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | --- | --- | --- |
 | `gemini generate-speech` | Token văn bản đầu vào, token âm thanh đầu ra (25 token mỗi giây âm thanh) | Ước tính: model quyết định độ dài âm thanh, nên `--max-cost` cần `--cost-policy estimate`. |
 | `elevenlabs tts` | Ký tự (Unicode code point đúng như khi gửi) | Đã chứng minh. `--previous-text` và `--next-text` chỉ được tính vào mức cao. |
+| `openrouter tts` | Ký tự theo giá niêm yết của OpenRouter; model Gemini tính theo token văn bản đầu vào và token âm thanh đầu ra | Đã chứng minh với model tính theo ký tự (`--instructions` chỉ được tính vào mức cao); ước tính với model Gemini. Chỉ định giá từ `--text`/`--prompt`: lần chạy dùng `--text-file` hoặc `--turns-file` là `unknown`. Model tính phí theo giây âm thanh tạo ra (Seed Audio) không có giá. |
+| `openrouter transcribe` | Số giây âm thanh đầu vào theo giá niêm yết của OpenRouter | Đã chứng minh với file WAV cục bộ (độ dài chính xác đọc từ header, làm tròn lên theo giây). File cục bộ khác được ước theo dung lượng ở 6–320 kbps, nên mức trần chỉ là ước tính và `--max-cost` cần `--cost-policy estimate`. Đầu vào là URL, và model tính theo token (`openai/gpt-4o-transcribe`, `google/gemini-3.5-transcribe`, ...), là `unknown`. Qua MCP, file không nằm trên Worker nên là `unknown`. |
 
 Mọi lệnh hoặc model khác có trạng thái ước tính `unknown`, không bao giờ là $0,
 và `--max-cost` từ chối chạy.
