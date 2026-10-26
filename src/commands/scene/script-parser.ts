@@ -244,7 +244,15 @@ function joinBareParts(text: string, parts: string[], maxChars: number): string[
       // last spoken character; never from inside a tag.
       const prev = slice(before);
       const masked = maskTags(prev);
-      const space = masked.search(/\s\S*$/u);
+      // The last space after which spoken text remains, so a bare "?" or tag
+      // at the end of `prev` moves together with the word before it.
+      let space = -1;
+      for (let k = masked.length - 1; k >= 0; k--) {
+        if (/\s/u.test(masked[k] ?? "") && hasSpokenText(prev.slice(k + 1))) {
+          space = k;
+          break;
+        }
+      }
       let from = space + 1;
       if (space < 0) {
         from = -1;

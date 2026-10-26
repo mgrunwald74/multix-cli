@@ -540,6 +540,16 @@ describe("scene scripts", () => {
       ["[whispering softly]嘘。本当だよ。", 20, ["[whispering softly]嘘", "。本当だよ。"]],
       ["Tu es vraiment sûrs ?", 20, ["Tu es vraiment", "sûrs ?"]],
       ["I was going to say ...", 20, ["I was going to", "say ..."]],
+      [
+        "Tu es vraiment sûr ? [soupire profondément] Absolument pas.",
+        30,
+        ["Tu es vraiment", "sûr ? [soupire profondément]", "Absolument pas."],
+      ],
+      [
+        "Tu es là ? [soupire longuement] D'accord, très bien.",
+        25,
+        ["Tu es", "là ? [soupire longuement]", "D'accord, très bien."],
+      ],
     ] as const) {
       expect(chunkText(line, max)).toEqual(parts);
       expect(partErrors(line, [...parts], max)).toEqual([]);
