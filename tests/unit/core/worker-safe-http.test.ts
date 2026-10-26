@@ -116,6 +116,24 @@ describe("redactUrlsInText", () => {
     expect(redactUrlsInText(once)).toBe(once);
   });
 
+  it("redacts the whole query when a raw JSON body escapes & or /", () => {
+    const goStyle = String.raw`{"error":"cannot fetch https://s3.example.com/a.wav?X-Amz-Algorithm=A\u0026X-Amz-Signature=SECRET5"}`;
+    const phpStyle = String.raw`{"error":"cannot fetch https:\/\/s3.example.com\/a.wav?a=1\/2\u0026sig=SECRET6 now"}`;
+    for (const body of [goStyle, phpStyle]) {
+      const out = redactUrlsInText(body);
+      expect(out).not.toMatch(/SECRET/);
+      expect(() => JSON.parse(out)).not.toThrow();
+      expect(redactUrlsInText(out)).toBe(out);
+    }
+    expect(redactUrlsInText(phpStyle)).toContain("?[redacted] now");
+  });
+
+  it("leaves an already redacted message unchanged", () => {
+    const message = new HttpError(400, "bad input", "https://x.test/a?key=SECRET7").message;
+    expect(message).toBe("HTTP 400 from https://x.test/a?[redacted]: bad input");
+    expect(redactUrlsInText(message)).toBe(message);
+  });
+
   it("keeps a JSON error body parseable", () => {
     const body = JSON.stringify({
       error: { message: 'cannot fetch "https://x.test/a.mp3?sig=SECRET4"' },

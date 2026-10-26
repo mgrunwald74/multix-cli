@@ -35,6 +35,11 @@ export function redactUrl(url: string): string {
 const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>\\]+/gi;
 /** A `?key=value` or `#key=value` tail left over (e.g. after a URL containing a space). */
 const QUERY_TAIL = /[?#](?!\[redacted\])[^\s"'<>\\]*=[^\s"'<>\\]*/g;
+/**
+ * The rest of a query cut short at a JSON escape (`\u0026` for "&", `\/`),
+ * as Go and PHP encoders write them. Stops before `\"` so JSON stays valid.
+ */
+const ESCAPED_REST = /\?\[redacted\](?=\\[^"])(?:\\[^"\s]|[^\s"'<>\\])*/g;
 
 /**
  * Redact every URL in free text (an error message, a provider's error body)
@@ -43,5 +48,8 @@ const QUERY_TAIL = /[?#](?!\[redacted\])[^\s"'<>\\]*=[^\s"'<>\\]*/g;
  * string is a credential. Idempotent; JSON stays parseable.
  */
 export function redactUrlsInText(text: string): string {
-  return text.replace(URL_IN_TEXT, (u) => redactUrl(u)).replace(QUERY_TAIL, "?[redacted]");
+  return text
+    .replace(URL_IN_TEXT, (u) => (u.includes("?[redacted]") ? u : redactUrl(u)))
+    .replace(QUERY_TAIL, "?[redacted]")
+    .replace(ESCAPED_REST, "?[redacted]");
 }
