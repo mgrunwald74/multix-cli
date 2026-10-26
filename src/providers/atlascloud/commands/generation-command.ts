@@ -9,6 +9,7 @@ import type { OutputCategory } from "../prediction-output.js";
 import type { AtlasMediaKind } from "../types.js";
 import { createAtlasClientFromEnv, createAtlasLogger, resolveMediaRefs } from "./env.js";
 import {
+  type ExecuteResult,
   type RunCliOpts,
   assertEndpoint,
   executePrediction,
@@ -31,7 +32,7 @@ export interface GenerationCommandConfig {
   endpointFromSchema?: boolean;
 }
 
-export async function runGenerationCommand(cfg: GenerationCommandConfig): Promise<void> {
+export async function runGenerationCommand(cfg: GenerationCommandConfig): Promise<ExecuteResult> {
   const logger = createAtlasLogger({
     verbose: cfg.opts.verbose,
     stdoutReserved: cfg.opts.async,
@@ -48,7 +49,7 @@ export async function runGenerationCommand(cfg: GenerationCommandConfig): Promis
   const body = buildModelInput(spec, cfg.requests(refUrls));
   logger.debug(`Request fields: ${Object.keys(body).join(", ")}`);
 
-  await executePrediction({
+  return executePrediction({
     client,
     logger,
     kind,

@@ -88,6 +88,7 @@ export function suggestedCommands(
 /** Task a command serves, from its name (used to suggest alternatives). */
 export function taskOf(command: string): string | undefined {
   const leaf = command.split(" ").pop() ?? "";
+  if (command.startsWith("speech ")) return "speech";
   if (/image-to-video|i2v|reference-to-video/.test(leaf)) return "image-to-video";
   if (/video|motion/.test(leaf)) return "video";
   if (/image-to-image|edit|variation|upscale/.test(leaf)) return "image-edit";

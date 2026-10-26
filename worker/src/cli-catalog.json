@@ -10606,6 +10606,211 @@
       ]
     },
     {
+      "group": "speech",
+      "description": "Text-to-speech across providers with one request shape and explicit routing",
+      "commands": [
+        {
+          "command": "speech models",
+          "description": "Speech models with their languages, formats, controls, voices and key readiness",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--provider",
+              "flags": "-p, --provider <name>",
+              "description": "Only this provider (gemini|openai|elevenlabs|minimax|atlas)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-p"
+            },
+            {
+              "long": "--language",
+              "flags": "-l, --language <code>",
+              "description": "Only models that document this ISO 639-1 language",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-l"
+            },
+            {
+              "long": "--ready",
+              "flags": "--ready",
+              "description": "Only providers whose API key is set",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            }
+          ]
+        },
+        {
+          "command": "speech generate",
+          "description": "Text-to-speech on an explicitly chosen provider/model, validated against its capabilities first",
+          "positionals": [],
+          "options": [
+            {
+              "long": "--provider",
+              "flags": "--provider <name>",
+              "description": "Speech provider (gemini|openai|elevenlabs|minimax|atlas)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--model",
+              "flags": "--model <id>",
+              "description": "Model id (default: the provider's TTS default; see `multix speech models`)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text",
+              "flags": "--text <str>",
+              "description": "Text to speak",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--text-file",
+              "flags": "--text-file <path>",
+              "description": "Read the text to speak from a UTF-8 file",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--voice",
+              "flags": "--voice <id>",
+              "description": "Voice name or id of the chosen provider (default: its default voice)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--speaker",
+              "flags": "--speaker <name:voice>",
+              "description": "Multi-speaker dialogue voice (repeatable; Gemini, max 2; each line starts with `name:`)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--language",
+              "flags": "--language <code>",
+              "description": "ISO 639-1 language code (checked against the model's documented list)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--style",
+              "flags": "--style <text>",
+              "description": "Delivery direction, e.g. \"warm, unhurried\" (models with style support)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--emotion",
+              "flags": "--emotion <name>",
+              "description": "Named emotion (models with an emotion parameter, e.g. MiniMax)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--format",
+              "flags": "--format <fmt>",
+              "description": "Audio container (mp3|wav|pcm|flac|opus|aac; default: from --output or the model's first)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--output",
+              "flags": "--output <path>",
+              "description": "Copy the audio to this path (its extension sets --format)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--async",
+              "flags": "--async",
+              "description": "Submit and return the job id (models with async support)",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--fallback",
+              "flags": "--fallback <provider[:model[:voice]]>",
+              "description": "Opt-in route used only when the routes before it have no API key (repeatable; never after a paid request)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": true,
+              "variadic": false,
+              "negatable": false,
+              "default": []
+            },
+            {
+              "long": "--extra",
+              "flags": "--extra <provider.key=value>",
+              "description": "Provider-specific option, e.g. elevenlabs.stability=0.4 (repeatable; see `multix speech models`)",
+              "required": false,
+              "takesValue": true,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false
+            },
+            {
+              "long": "--verbose",
+              "flags": "-v, --verbose",
+              "description": "Verbose logging",
+              "required": false,
+              "takesValue": false,
+              "valueOptional": false,
+              "variadic": false,
+              "negatable": false,
+              "short": "-v"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "group": "media",
       "description": "Media processing via ffmpeg/ImageMagick: compress video/audio/images, split long videos, batch optimize directories",
       "commands": [

@@ -35,6 +35,8 @@ export interface RunState {
   ids: string[];
   /** Model named by the first provider request that names one. */
   requestModel?: string;
+  /** Structured result a command reports for the envelope's `data` (wins over parsed stdout). */
+  data?: unknown;
   /** stdout/stderr text captured in JSON mode. */
   stdout: string[];
   stderr: string[];

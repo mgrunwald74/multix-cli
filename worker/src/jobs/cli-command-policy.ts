@@ -53,6 +53,12 @@ export interface CommandPolicy {
   /** Options the CLI collects when repeated but the catalog cannot tell (custom parser, no array default). */
   repeatable?: string[];
   caps?: CapRules;
+  /**
+   * The job gets the keys of the provider groups these options name (the part
+   * of each value before the first `:`) instead of the command group's keys.
+   * The first option is required; an empty list gives the job no keys.
+   */
+  keyOptions?: { options: readonly string[]; groups: readonly string[] };
 }
 
 /** Commands that act on the local machine or need an interactive login. */
@@ -81,6 +87,7 @@ const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
 /** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
 const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
 const IMAGE_COUNT: CapRules = { count: ["num-images"] };
+const SPEECH_KEY_GROUPS = ["gemini", "openai", "elevenlabs", "minimax", "atlas"];
 
 export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "gemini analyze": { fileOptions: { files: "file" } },
@@ -229,6 +236,14 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "media split": { fileOptions: { input: "file" } },
   "media batch": { fileOptions: { "input-dir": "dir" } },
   "doc convert": { fileOptions: { input: "file" } },
+  // One façade over several providers: only the routed providers' keys reach the job.
+  "speech generate": {
+    fileOptions: { "text-file": "file" },
+    repeatable: ["extra"],
+    keyOptions: { options: ["provider", "fallback"], groups: SPEECH_KEY_GROUPS },
+  },
+  // Readiness would describe the container, not the caller's saved keys (multix_catalog does).
+  "speech models": { unsupported: ["ready"], keyOptions: { options: [], groups: [] } },
 };
 
 /**
@@ -250,6 +265,14 @@ export const GROUP_KEYS: Readonly<Record<string, readonly ProviderSecretName[]>>
   replicate: ["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"],
   runway: ["RUNWAYML_API_SECRET"],
   heygen: ["HEYGEN_API_KEY"],
+  // Readiness only: a speech job gets the keys of the providers it routes to (keyOptions).
+  speech: [
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "MINIMAX_API_KEY",
+    "ATLASCLOUD_API_KEY",
+  ],
 };
 
 /** Names that must all be set for a group to be usable (the rest are fallbacks or optional). */
@@ -260,6 +283,15 @@ export const GROUP_REQUIRED_KEYS: Readonly<
   byteplus: [["BYTEPLUS_API_KEY", "ARK_API_KEY"]],
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   cloudflare: [["CLOUDFLARE_ACCOUNT_ID"], ["CLOUDFLARE_API_TOKEN"]],
+  speech: [
+    [
+      "GEMINI_API_KEY",
+      "OPENAI_API_KEY",
+      "ELEVENLABS_API_KEY",
+      "MINIMAX_API_KEY",
+      "ATLASCLOUD_API_KEY",
+    ],
+  ],
 };
 
 export function policyFor(command: string): CommandPolicy {

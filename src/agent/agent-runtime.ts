@@ -269,7 +269,7 @@ export function finalizeRun(input: FinalizeInput): number {
       duration_ms: duration,
       outputs,
       ...(allWarnings.length ? { warnings: allWarnings } : {}),
-      ...stdoutPayload(run.stdout),
+      ...(run.data !== undefined ? { data: run.data } : stdoutPayload(run.stdout)),
       ...(info ? { error } : {}),
       exit_code: exitCode,
       ...(usage ? { usage } : {}),

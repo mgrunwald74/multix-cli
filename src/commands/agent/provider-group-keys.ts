@@ -21,6 +21,16 @@ export const GROUP_KEY_ROWS: Readonly<Record<string, readonly (readonly string[]
   replicate: [["REPLICATE_API_TOKEN", "REPLICATE_API_KEY"]],
   runway: [["RUNWAYML_API_SECRET"]],
   heygen: [["HEYGEN_API_KEY"]],
+  // `multix speech` routes to one provider; any one of their keys makes it usable.
+  speech: [
+    [
+      "GEMINI_API_KEY",
+      "OPENAI_API_KEY",
+      "ELEVENLABS_API_KEY",
+      "MINIMAX_API_KEY",
+      "ATLASCLOUD_API_KEY",
+    ],
+  ],
 };
 
 /** Key env names a group reads (first of each row), for messages. */

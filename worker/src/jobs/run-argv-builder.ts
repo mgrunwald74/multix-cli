@@ -17,6 +17,7 @@ import {
   GLOBALLY_UNSUPPORTED_OPTIONS,
   OUTPUT_DIR_OPTION,
   OUTPUT_FILE_OPTION,
+  type CommandPolicy,
   policyFor,
 } from "./cli-command-policy.js";
 import type { JobInputFile } from "./job-protocol.js";
@@ -36,6 +37,8 @@ export interface PreparedRun {
   /** Normalised command path, e.g. `gemini generate`. */
   command: string;
   group: string;
+  /** Provider groups whose keys the job receives. */
+  keyGroups: string[];
   argv: string[];
   inputs: JobInputFile[];
 }
@@ -52,6 +55,32 @@ const ASSET_REF_RE = /^asset:[A-Za-z0-9_-]{1,128}$/;
 export const NAME_PART_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const defaultIndex = new CatalogIndex();
+
+function keyGroupsFor(
+  path: string,
+  group: string,
+  policy: CommandPolicy,
+  values: OptionValues,
+): string[] {
+  const rule = policy.keyOptions;
+  if (!rule) return [group];
+  const [first] = rule.options;
+  if (first && !values.has(first)) {
+    throw new ValidationError(`options.${first} is required for "${path}" on this server`);
+  }
+  const groups = new Set<string>();
+  for (const name of rule.options) {
+    const value = values.get(name);
+    for (const v of value === true || value === undefined ? [] : value) {
+      const named = v.split(":")[0] ?? "";
+      if (!rule.groups.includes(named)) {
+        throw new ValidationError(`--${name} must name one of: ${rule.groups.join(", ")}`);
+      }
+      groups.add(named);
+    }
+  }
+  return [...groups];
+}
 
 function checkText(value: string, field: string): string {
   if (value.length > MAX_VALUE_CHARS) {
@@ -176,6 +205,7 @@ export function prepareRun(
     }
   }
 
+  const keyGroups = keyGroupsFor(path, group, policy, values);
   const positionals = positionalValues(path, command.positionals, request.args, {
     paths: resolved.paths,
     targets,
@@ -187,7 +217,7 @@ export function prepareRun(
     else for (const v of value) argv.push(`--${name}=${v}`);
   }
   if (positionals.length > 0) argv.push("--", ...positionals);
-  return { command: path, group, argv, inputs: resolved.files };
+  return { command: path, group, keyGroups, argv, inputs: resolved.files };
 }
 
 interface PositionalFiles {

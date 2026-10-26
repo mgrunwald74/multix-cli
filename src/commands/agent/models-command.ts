@@ -39,6 +39,7 @@ const TASK_BY_COMMAND: Record<string, string> = {
   "heygen template": "avatar-video",
   "heygen model-video": "avatar-video",
   "heygen tts": "speech",
+  "speech generate": "speech",
   "heygen translate": "video-edit",
   "heygen lipsync": "video-edit",
   "elevenlabs dub": "video-edit",
