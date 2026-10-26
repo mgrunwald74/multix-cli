@@ -241,6 +241,92 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     },
   );
 
+  it("speech generate is priced per route, reading --text-file, and sends nothing", async () => {
+    fs.writeFileSync(path.join(tmp, "scene.txt"), `${VI}\n`);
+    const est = await run([
+      "speech",
+      "generate",
+      "--provider",
+      "elevenlabs",
+      "--text-file",
+      "scene.txt",
+      "--estimate",
+      "--json",
+    ]);
+    expect(est.exitCode).toBe(0);
+    expect(envelope(est.stdout)).toMatchObject({
+      ok: true,
+      estimate_only: true,
+      estimate: { status: "estimated", upper_bound: "proven", text: { characters: 17 } },
+    });
+    const over = await run([
+      "speech",
+      "generate",
+      "--provider",
+      "elevenlabs",
+      "--text",
+      VI,
+      "--max-cost",
+      "0.0001",
+      "--json",
+    ]);
+    expect(over.exitCode).toBe(2);
+    expect(envelope(over.stdout).error.code).toBe("BUDGET_EXCEEDED");
+  });
+
+  it("speech generate prices the env default Gemini model, as primary and as fallback", async () => {
+    const pro = { GEMINI_TTS_MODEL: "gemini-2.5-pro-preview-tts" };
+    const primary = await run(
+      ["speech", "generate", "--provider", "gemini", "--text", VI, "--estimate", "--json"],
+      pro,
+    );
+    expect(envelope(primary.stdout).estimate).toMatchObject({
+      status: "estimated",
+      model: "gemini-2.5-pro-preview-tts",
+    });
+    const fallback = await run(
+      [
+        "speech",
+        "generate",
+        "--provider",
+        "elevenlabs",
+        "--fallback",
+        "gemini",
+        "--text",
+        VI,
+        "--estimate",
+        "--json",
+      ],
+      pro,
+    );
+    expect(envelope(fallback.stdout).estimate.assumptions.join(" ")).toContain(
+      "gemini/gemini-2.5-pro-preview-tts",
+    );
+  });
+
+  it("speech generate with an unpriced --fallback route fails closed", async () => {
+    const result = await run(
+      [
+        "speech",
+        "generate",
+        "--provider",
+        "elevenlabs",
+        "--fallback",
+        "openai",
+        "--text",
+        VI,
+        "--max-cost",
+        "5",
+        "--json",
+      ],
+      { OPENAI_API_KEY: "test-key-not-real" },
+    );
+    expect(result.exitCode).toBe(2);
+    const out = envelope(result.stdout);
+    expect(out.error.code).toBe("BUDGET_UNPROVEN");
+    expect(out.estimate).toMatchObject({ status: "unknown", reason: "unsupported" });
+  });
+
   it("a submit that fails after it was sent is uncertain, never $0", async () => {
     const result = await run(
       ["elevenlabs", "tts", "--text", VI, "--json"],
