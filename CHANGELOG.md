@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.1](https://github.com/mrgoonie/multix-cli/compare/v1.21.0...v1.21.1) (2026-10-26)
+
+
+### Fixed
+
+* **models:** do not confirm models from a cache older than the TTL ceiling when offline ([#352](https://github.com/mrgoonie/multix-cli/issues/352)) ([4438372](https://github.com/mrgoonie/multix-cli/commit/4438372199bb9b8bad950d4f9a16b36d8d5e89ba)), closes [#349](https://github.com/mrgoonie/multix-cli/issues/349)
+
+## [1.21.0](https://github.com/mrgoonie/multix-cli/compare/v1.20.0...v1.21.0) (2026-10-26)
+
+
+### Added
+
+* **scene:** character voice profiles, scene manifests and selective take rendering ([#320](https://github.com/mrgoonie/multix-cli/issues/320)) ([0abb1ff](https://github.com/mrgoonie/multix-cli/commit/0abb1fffe55118c47e06cffce4086189a70f13af))
+
 ## [1.20.0](https://github.com/mrgoonie/multix-cli/compare/v1.19.0...v1.20.0) (2026-10-26)
 
 
