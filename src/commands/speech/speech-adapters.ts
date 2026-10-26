@@ -144,9 +144,14 @@ const elevenlabs: SpeechAdapter = {
       ...(next_text !== undefined ? { next_text } : {}),
     };
     const format = route.format ?? "mp3";
-    const bytes = await apiPostBinary(`text-to-speech/${route.voice}`, payload, apiKey, {
-      query: { output_format: ELEVENLABS_FORMAT[format] ?? "mp3_44100_128" },
-    });
+    const bytes = await apiPostBinary(
+      `text-to-speech/${encodeURIComponent(route.voice ?? "")}`,
+      payload,
+      apiKey,
+      {
+        query: { output_format: ELEVENLABS_FORMAT[format] ?? "mp3_44100_128" },
+      },
+    );
     const file = saveBytes({
       bytes,
       task: "tts",

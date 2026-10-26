@@ -141,7 +141,7 @@ function registerGenerate(parent: Command): void {
     )
     .option(
       "--language <code>",
-      "ISO 639-1 language code (checked against the model's documented list)",
+      "Language code, e.g. vi, en, fil (checked against the model's documented list)",
     )
     .option(
       "--style <text>",
@@ -155,8 +155,8 @@ function registerGenerate(parent: Command): void {
     .option("--output <path>", "Copy the audio to this path (its extension sets --format)")
     .option("--async", "Submit and return the job id (models with async support)")
     .option(
-      "--fallback <provider[:model[:voice]]>",
-      "Opt-in route used only when the routes before it have no API key (repeatable; never after a paid request)",
+      "--fallback <route>",
+      "Opt-in provider:model:voice route (model and voice optional) used only when the routes before it have no API key (repeatable; never after a paid request)",
       collect,
       [] as string[],
     )
@@ -237,11 +237,8 @@ function registerGenerate(parent: Command): void {
         verbose: opts.verbose ?? false,
       });
       run.data = { ...result, files: out.files, ...(out.job ? { job: out.job } : {}) };
-      if (out.job) {
-        console.log(`Submitted ${chosen.provider} job ${out.job.id}`);
-        console.log(`Resume with: ${out.job.resume}`);
-        return;
-      }
+      // The provider runner already printed the job id (stdout) and the resume command (stderr).
+      if (out.job) return;
       for (const file of out.files) console.log(`Generated audio: ${file}`);
       if (opts.output) console.log(`Copied to: ${opts.output}`);
     });
@@ -267,6 +264,7 @@ function modelRow(m: SpeechModel, defaults: Map<SpeechProvider, string>) {
     formats: m.formats,
     style: m.style,
     ...(m.emotions ? { emotions: m.emotions } : {}),
+    ...(m.max_chars ? { max_chars: m.max_chars } : {}),
     max_speakers: m.max_speakers,
     async: m.async,
     voice: {
@@ -290,7 +288,7 @@ function registerModels(parent: Command): void {
     .command("models")
     .description("Speech models with their languages, formats, controls, voices and key readiness")
     .option("-p, --provider <name>", `Only this provider (${SPEECH_PROVIDERS.join("|")})`)
-    .option("-l, --language <code>", "Only models that document this ISO 639-1 language")
+    .option("-l, --language <code>", "Only models that document this language code")
     .option("--ready", "Only providers whose API key is set")
     .action((opts: ModelsOpts) => {
       if (opts.provider && !isSpeechProvider(opts.provider)) {

@@ -67,9 +67,14 @@ export function registerTtsCommand(parent: Command): void {
 
       logger.debug(`TTS voice=${opts.voice} model=${opts.model} fmt=${opts.format}`);
 
-      const bytes = await apiPostBinary(`text-to-speech/${opts.voice}`, payload, apiKey, {
-        query: { output_format: opts.format },
-      });
+      const bytes = await apiPostBinary(
+        `text-to-speech/${encodeURIComponent(opts.voice)}`,
+        payload,
+        apiKey,
+        {
+          query: { output_format: opts.format },
+        },
+      );
 
       const dest = saveBytes({
         bytes,

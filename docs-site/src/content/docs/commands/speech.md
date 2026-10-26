@@ -51,13 +51,13 @@ Run `multix speech generate --help` for the full flag list. The main ones:
 | `--text <str>` / `--text-file <path>` | The text, inline or from a UTF-8 file (one of them, not both). |
 | `--voice <id>` | A voice of the chosen provider; default is that provider's default voice. |
 | `--speaker <name:voice>` | Multi-speaker dialogue (repeatable; Gemini, up to 2). Each text line starts with `name:`. |
-| `--language <code>` | ISO 639-1 code, checked against the model's documented list. |
+| `--language <code>` | Language code (e.g. `vi`, `fil`), checked against the model's documented list. |
 | `--style <text>` | Delivery direction, for models with style support. |
 | `--emotion <name>` | Named emotion, for models with an emotion parameter (MiniMax). |
 | `--format <fmt>` | Audio container; otherwise taken from the `--output` extension or the model's first format. |
 | `--output <path>` | Copy the audio to this path. |
 | `--async` | Submit and print a job id and resume command (models with async support, such as Atlas Cloud). |
-| `--fallback <provider[:model[:voice]]>` | Opt-in fallback route (repeatable); see below. |
+| `--fallback <route>` | Opt-in fallback route `provider[:model[:voice]]` (repeatable); see below. |
 | `--extra <provider.key=value>` | Provider-specific option, for example `elevenlabs.stability=0.4` (repeatable). |
 
 The whole request is validated before any provider is called, and every
@@ -102,7 +102,11 @@ interchangeable, so routing is explicit:
 - **Fallback is opt-in.** A `--fallback` route is used only when every route
   before it cannot start because its API key is missing. That check happens
   before any paid request, and every fallback route is validated up front like
-  the primary.
+  the primary. A fallback on another provider uses its own default voice
+  unless the route names one (`minimax::<voice-id>`); `--voice` is never
+  carried across providers.
+- **Too-long text is rejected, not cut.** Models with a documented character
+  limit (`max_chars` in `speech models`) refuse longer text before any request.
 - **No paid request twice.** Once a provider has been called, a failure is
   reported as is; it is never sent again on another route.
 - **The switch is visible.** When a fallback is taken, a warning on stderr
@@ -121,10 +125,11 @@ The global `--json` and `--dry-run` flags work as on every command
 ([For AI agents](/reference/for-ai-agents/)).
 
 - `--dry-run` validates the request, resolves the route, and shows the first
-  provider request instead of sending it.
+  provider request instead of sending it. Atlas Cloud reads the model's
+  input schema first, so its dry run shows that lookup, not the submit.
 - With `--json`, `data` holds a `multix.speech.result/v1` object: `request`
   (schema `multix.speech.request/v1`; the text is recorded only as
-  `text_chars` and `text_sha256`, never echoed), `route` (provider, model,
+  `text_chars` and `text_sha256`; a dry run's `request.body` still shows it), `route` (provider, model,
   voice, format), `fallback` when one was taken, and the files or async `job`.
 - `multix models --task speech` lists `multix speech generate` beside the
   provider commands.

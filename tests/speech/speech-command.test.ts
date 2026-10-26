@@ -282,8 +282,11 @@ describe("async submission", () => {
     expect(result.data).toMatchObject({
       job: { id: "pred_123", resume: "multix atlas status pred_123 --wait --download" },
     });
-    expect(result.stdout).toContain("Submitted atlas job pred_123");
-    expect(result.stdout).toContain("Resume with: multix atlas status pred_123 --wait --download");
+    // The job id is printed once, by the provider runner.
+    expect(result.stdout).toEqual(["pred_123"]);
+    expect(result.stderr.join("\n")).toContain(
+      "Resume with: multix atlas status pred_123 --wait --download",
+    );
     expect(posts(ATLAS_SUBMIT)).toHaveLength(1);
   });
 });

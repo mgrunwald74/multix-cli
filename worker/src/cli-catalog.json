@@ -10628,7 +10628,7 @@
             {
               "long": "--language",
               "flags": "-l, --language <code>",
-              "description": "Only models that document this ISO 639-1 language",
+              "description": "Only models that document this language code",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -10717,7 +10717,7 @@
             {
               "long": "--language",
               "flags": "--language <code>",
-              "description": "ISO 639-1 language code (checked against the model's documented list)",
+              "description": "Language code, e.g. vi, en, fil (checked against the model's documented list)",
               "required": false,
               "takesValue": true,
               "valueOptional": false,
@@ -10776,11 +10776,11 @@
             },
             {
               "long": "--fallback",
-              "flags": "--fallback <provider[:model[:voice]]>",
-              "description": "Opt-in route used only when the routes before it have no API key (repeatable; never after a paid request)",
+              "flags": "--fallback <route>",
+              "description": "Opt-in provider:model:voice route (model and voice optional) used only when the routes before it have no API key (repeatable; never after a paid request)",
               "required": false,
               "takesValue": true,
-              "valueOptional": true,
+              "valueOptional": false,
               "variadic": false,
               "negatable": false,
               "default": []

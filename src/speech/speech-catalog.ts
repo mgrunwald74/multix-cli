@@ -34,6 +34,8 @@ export interface SpeechModel {
   style: boolean;
   /** Named emotions (`--emotion`); absent: no emotion parameter. */
   emotions?: readonly string[];
+  /** Longest text one request takes; absent: not documented (the provider checks it). */
+  max_chars?: number;
   /** Voice used when none is given, when it differs from the provider's default. */
   default_voice?: string;
   /** Voices in one request: 1, or more for multi-speaker dialogue (`--speaker`). */
@@ -228,6 +230,7 @@ const OPENAI_MODELS: readonly SpeechModel[] = ["gpt-4o-mini-tts", "tts-1", "tts-
     languages: OPENAI_LANGUAGES,
     formats: ["mp3", "opus", "aac", "flac", "wav", "pcm"],
     style: model === "gpt-4o-mini-tts",
+    max_chars: 4096,
     // tts-1 and tts-1-hd take only the nine original voices.
     ...(model === "gpt-4o-mini-tts" ? {} : { default_voice: "alloy" }),
     max_speakers: 1,
@@ -249,11 +252,22 @@ function elevenLabsModel(model: string): SpeechModel {
             ? ["en"]
             : null;
   const languageParam = model === "eleven_v3" || model.endsWith("_v2_5");
+  const maxChars =
+    model === "eleven_v3"
+      ? 5000
+      : model === "eleven_multilingual_v2"
+        ? 10_000
+        : model.endsWith("_v2_5")
+          ? 40_000
+          : model.endsWith("_v2")
+            ? 30_000
+            : undefined;
   return {
     provider: "elevenlabs",
     model,
     languages,
     ...(languageParam ? { language_param: "language_code" } : {}),
+    ...(maxChars ? { max_chars: maxChars } : {}),
     formats: ["mp3", "pcm"],
     style: false,
     max_speakers: 1,
@@ -271,6 +285,8 @@ function minimaxModel(model: string): SpeechModel {
       (code) => !(model.startsWith("speech-02") && MINIMAX_LATE_LANGUAGES.has(code)),
     ),
     language_param: "language_boost",
+    // The generator sends at most 10,000 characters; longer text would be cut and still billed.
+    max_chars: 10_000,
     formats: ["mp3", "wav", "flac", "pcm"],
     style: false,
     emotions: model.startsWith("speech-2.6") ? MINIMAX_26_EMOTIONS : MINIMAX_EMOTIONS,
@@ -313,8 +329,15 @@ export function speechModels(): SpeechModel[] {
  * then checked by the provider, not here.
  */
 export function findSpeechModel(provider: SpeechProvider, model: string): SpeechModel | undefined {
-  const known = speechModels().find((m) => m.provider === provider && m.model === model);
-  if (known || !SPEECH_PROVIDER_INFO[provider].any_model) return known;
+  const rows = speechModels().filter((m) => m.provider === provider);
+  const known = rows.find((m) => m.model === model);
+  if (known) return known;
+  // A dated snapshot (gpt-4o-mini-tts-2025-12-15) has its family's capabilities.
+  const family = rows
+    .filter((m) => model.startsWith(`${m.model}-`))
+    .sort((a, b) => b.model.length - a.model.length)[0];
+  if (family) return { ...family, model };
+  if (!SPEECH_PROVIDER_INFO[provider].any_model) return undefined;
   return {
     provider,
     model,

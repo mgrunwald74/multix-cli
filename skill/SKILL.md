@@ -417,7 +417,7 @@ multix speech generate --provider minimax --language vi --emotion happy --text "
 - Never switches provider silently: pass `--provider` (a bare `--model` works only if exactly one provider serves it).
 - `--fallback provider[:model[:voice]]` (repeatable) is opt-in, used only when earlier routes lack an API key, before any paid request; a paid request is never resent. A fallback prints a warning with voice/billing/format differences (`data.fallback` in JSON).
 - `--voice` must belong to the chosen provider; `--extra <provider.key=value>` for provider options (keys listed in `speech models`).
-- JSON `data` = `multix.speech.result/v1`: `request` (text as `text_chars` + `text_sha256`, not echoed), `route`, files or async `job`.
+- JSON `data` = `multix.speech.result/v1`: `request` (text recorded as `text_chars` + `text_sha256`), `route`, files or async `job`.
 - Remote MCP: `--provider` required; `--text-file` is an `inputs` URL; `speech models --ready` unavailable.
 
 ### Provider TTS commands

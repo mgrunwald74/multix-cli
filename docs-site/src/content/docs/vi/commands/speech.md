@@ -51,13 +51,13 @@ Chạy `multix speech generate --help` để xem đầy đủ flag. Các flag ch
 | `--text <str>` / `--text-file <path>` | Văn bản, viết trực tiếp hoặc đọc từ file UTF-8 (chọn một, không dùng cả hai). |
 | `--voice <id>` | Voice của provider đã chọn; mặc định là voice mặc định của provider đó. |
 | `--speaker <name:voice>` | Hội thoại nhiều giọng (lặp lại được; Gemini, tối đa 2). Mỗi dòng văn bản bắt đầu bằng `name:`. |
-| `--language <code>` | Mã ISO 639-1, được đối chiếu với danh sách ngôn ngữ của model. |
+| `--language <code>` | Mã ngôn ngữ (ví dụ `vi`, `fil`), được đối chiếu với danh sách ngôn ngữ của model. |
 | `--style <text>` | Chỉ dẫn cách đọc, cho model hỗ trợ style. |
 | `--emotion <name>` | Emotion có tên, cho model có tham số emotion (MiniMax). |
 | `--format <fmt>` | Định dạng audio; nếu bỏ trống thì lấy từ đuôi `--output` hoặc định dạng đầu tiên của model. |
 | `--output <path>` | Sao chép audio tới đường dẫn này. |
 | `--async` | Gửi job rồi in job id và lệnh tiếp tục (model hỗ trợ async, như Atlas Cloud). |
-| `--fallback <provider[:model[:voice]]>` | Route dự phòng phải tự bật (lặp lại được); xem bên dưới. |
+| `--fallback <route>` | Route dự phòng `provider[:model[:voice]]` phải tự bật (lặp lại được); xem bên dưới. |
 | `--extra <provider.key=value>` | Tùy chọn riêng của provider, ví dụ `elevenlabs.stability=0.4` (lặp lại được). |
 
 Toàn bộ request được kiểm tra trước khi gọi provider, và mọi lỗi được báo cùng
@@ -101,7 +101,12 @@ nên routing luôn tường minh:
 - **Fallback phải tự bật.** Route `--fallback` chỉ được dùng khi mọi route
   trước nó không thể bắt đầu vì thiếu API key. Việc kiểm tra này diễn ra trước
   mọi request tính phí, và mỗi route fallback được kiểm tra ngay từ đầu như
-  route chính.
+  route chính. Fallback sang provider khác dùng voice mặc định của provider đó,
+  trừ khi route ghi rõ voice (`minimax::<voice-id>`); `--voice` không bao giờ
+  được mang sang provider khác.
+- **Văn bản quá dài bị từ chối, không bị cắt.** Model có giới hạn ký tự được
+  công bố (`max_chars` trong `speech models`) từ chối văn bản dài hơn trước khi
+  gửi request.
 - **Không trả phí hai lần.** Khi đã gọi provider, lỗi được báo nguyên trạng và
   không bao giờ được gửi lại qua route khác.
 - **Việc chuyển route luôn hiển thị.** Khi dùng fallback, một cảnh báo trên
@@ -120,10 +125,11 @@ Các flag toàn cục `--json` và `--dry-run` hoạt động như ở mọi l�
 ([Dành cho AI agent](/vi/reference/for-ai-agents/)).
 
 - `--dry-run` kiểm tra request, chọn route và hiển thị request đầu tiên gửi tới
-  provider thay vì gửi đi.
+  provider thay vì gửi đi. Atlas Cloud đọc input schema của model trước, nên
+  dry run của nó hiển thị bước tra cứu đó chứ không phải request submit.
 - Với `--json`, `data` là object `multix.speech.result/v1`: `request` (schema
   `multix.speech.request/v1`; văn bản chỉ được ghi dưới dạng `text_chars` và
-  `text_sha256`, không bao giờ in lại), `route` (provider, model, voice,
+  `text_sha256`; `request.body` của dry run vẫn hiển thị văn bản), `route` (provider, model, voice,
   format), `fallback` khi có dùng, cùng các file hoặc `job` async.
 - `multix models --task speech` liệt kê `multix speech generate` cạnh các lệnh
   của từng provider.

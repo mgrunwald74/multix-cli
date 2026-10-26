@@ -184,14 +184,16 @@ export function voiceProblem(
     }
     case "elevenlabs":
       // Voice ids are opaque, so only a name that belongs to another provider is rejected.
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(voice)) {
+        return `"${voice}" is not an ElevenLabs voice id (letters, digits, _ and - only). List voices with: multix elevenlabs voices list`;
+      }
       return Object.hasOwn(ELEVENLABS_RECOMMENDED_VOICES, voice) ||
         elsewhere() === "" ||
         /^[A-Za-z0-9]{20}$/.test(voice)
         ? undefined
         : `"${voice}" is not an ElevenLabs voice id${elsewhere()}. List ElevenLabs voices with: multix elevenlabs voices list, or use one of: ${Object.keys(ELEVENLABS_RECOMMENDED_VOICES).join(", ")}`;
     case "minimax":
-      return (OPENAI_TTS_VOICES as readonly string[]).includes(voice) ||
-        (GEMINI_TTS_VOICES as readonly string[]).includes(voice)
+      return elsewhere() !== ""
         ? `"${voice}" is not a MiniMax voice id${elsewhere()}. MiniMax voice ids look like English_expressive_narrator`
         : undefined;
     default:
@@ -270,6 +272,14 @@ export function buildRoute(
   const label = `${provider}/${model}`;
   const multi = input.speakers.length > 0;
 
+  if (multi && (target.voice ?? input.voice)) {
+    problems.push("--voice and --speaker cannot be combined; give each speaker its voice");
+  }
+  if (input.text.length > (capability.max_chars ?? Number.POSITIVE_INFINITY)) {
+    problems.push(
+      `${label} takes at most ${capability.max_chars} characters per request (got ${input.text.length}); split the text`,
+    );
+  }
   if (multi && capability.max_speakers < 2) {
     problems.push(`${label} speaks with one voice; --speaker needs gemini`);
   } else if (input.speakers.length > capability.max_speakers) {
@@ -356,9 +366,11 @@ export function planSpeechRoutes(opts: {
   for (const spec of opts.fallbacks) {
     const parsed = parseRouteSpec(spec);
     const provider = requireProvider(parsed.provider);
+    // Voices are provider-specific: another provider gets its own default unless the spec names one.
+    const input = provider === target.provider ? opts.input : { ...opts.input, voice: undefined };
     const route = buildRoute(
       { provider, model: parsed.model ?? opts.defaultModel(provider), voice: parsed.voice },
-      opts.input,
+      input,
     );
     if (routes.some((r) => r.provider === route.provider && r.model === route.model)) {
       throw new ValidationError(`--fallback ${spec} repeats a route already in the plan`);

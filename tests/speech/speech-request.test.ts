@@ -495,3 +495,70 @@ describe("MiniMax language mapping", () => {
     expect(findSpeechModel("minimax", "speech-2.8-hd")?.language_param).toBe("language_boost");
   });
 });
+
+describe("review hardening", () => {
+  it("does not carry --voice to a fallback on another provider", () => {
+    const { routes } = planSpeechRoutes({
+      provider: "elevenlabs",
+      fallbacks: ["minimax"],
+      input: input({ voice: "JBFqnCBsd6RMkjVDRZzb" }),
+      defaultModel,
+    });
+    expect(routes[1]).toMatchObject({
+      provider: "minimax",
+      voice: "English_expressive_narrator",
+      voice_defaulted: true,
+    });
+  });
+
+  it("uses the voice a fallback route names", () => {
+    const { routes } = planSpeechRoutes({
+      provider: "openai",
+      fallbacks: ["minimax::Vietnamese_kindhearted_girl"],
+      input: input({ voice: "nova" }),
+      defaultModel,
+    });
+    expect(routes[1]?.voice).toBe("Vietnamese_kindhearted_girl");
+  });
+
+  it("rejects an ElevenLabs-shaped voice id on MiniMax", () => {
+    expect(() => planOne("minimax", undefined, { voice: "JBFqnCBsd6RMkjVDRZzb" })).toThrow(
+      /not a MiniMax voice id \(it looks like an ElevenLabs voice id\)/,
+    );
+  });
+
+  it.each(["../../v1/user", "abc?x=1", "a/b"])(
+    "rejects ElevenLabs voice %s that would change the request path",
+    (voice) => {
+      expect(() => planOne("elevenlabs", undefined, { voice })).toThrow(ValidationError);
+    },
+  );
+
+  it("rejects text longer than the model's documented limit instead of cutting it", () => {
+    expect(() => planOne("minimax", undefined, { text: "a".repeat(10_001) })).toThrow(
+      /takes at most 10000 characters per request \(got 10001\)/,
+    );
+    expect(() => planOne("openai", "tts-1", { text: "a".repeat(4097) })).toThrow(/at most 4096/);
+    expect(() => planOne("minimax", undefined, { text: "a".repeat(10_000) })).not.toThrow();
+  });
+
+  it("rejects --voice together with --speaker", () => {
+    expect(() =>
+      planOne("gemini", undefined, {
+        voice: "Kore",
+        speakers: [
+          { speaker: "Lan", voice: "Kore" },
+          { speaker: "Minh", voice: "Puck" },
+        ],
+      }),
+    ).toThrow(/--voice and --speaker cannot be combined/);
+  });
+
+  it("gives a dated snapshot its family's capabilities", () => {
+    const route = planOne("openai", "gpt-4o-mini-tts-2025-12-15", { style: "warm" });
+    expect(route?.model).toBe("gpt-4o-mini-tts-2025-12-15");
+    expect(route?.capability.style).toBe(true);
+    expect(findSpeechModel("openai", "tts-1-hd-2024")?.max_chars).toBe(4096);
+    expect(findSpeechModel("openai", "gpt-5-tts")).toBeUndefined();
+  });
+});
