@@ -10,7 +10,11 @@
  * a row below states them with a source. Data only: no `node:*` imports.
  */
 
-import { ELEVENLABS_TTS_MODELS } from "../providers/elevenlabs/models.js";
+import {
+  ELEVENLABS_TTS_MODELS,
+  ELEVENLABS_TTS_MODEL_CAPS,
+  type ElevenLabsTtsModel,
+} from "../providers/elevenlabs/models.js";
 import { GEMINI_INTERACTIONS_TTS_MODELS, GEMINI_TTS_MODELS } from "../providers/gemini/voices.js";
 import { MINIMAX_SPEECH_MODELS } from "../providers/minimax/models.js";
 
@@ -240,34 +244,26 @@ const OPENAI_MODELS: readonly SpeechModel[] = ["gpt-4o-mini-tts", "tts-1", "tts-
   }),
 );
 
-function elevenLabsModel(model: string): SpeechModel {
-  const languages =
-    model === "eleven_v3"
-      ? ELEVENLABS_V3_LANGUAGES
-      : model === "eleven_multilingual_v2"
-        ? ELEVENLABS_V2_LANGUAGES
-        : model.endsWith("_v2_5")
-          ? ELEVENLABS_V25_LANGUAGES
-          : model === "eleven_flash_v2" || model === "eleven_turbo_v2"
-            ? ["en"]
-            : null;
-  const languageParam = model === "eleven_v3" || model.endsWith("_v2_5");
-  const maxChars =
-    model === "eleven_v3"
-      ? 5000
-      : model === "eleven_multilingual_v2"
-        ? 10_000
-        : model.endsWith("_v2_5")
-          ? 40_000
-          : model.endsWith("_v2")
-            ? 30_000
-            : undefined;
+function elevenLabsModel(model: ElevenLabsTtsModel): SpeechModel {
+  const caps = ELEVENLABS_TTS_MODEL_CAPS[model];
+  // v4 publishes no per-model list; the API answers an unsupported code with 400.
+  const languages = model.startsWith("eleven_v3")
+    ? ELEVENLABS_V3_LANGUAGES
+    : model === "eleven_multilingual_v2"
+      ? ELEVENLABS_V2_LANGUAGES
+      : model.endsWith("_v2_5")
+        ? ELEVENLABS_V25_LANGUAGES
+        : model === "eleven_flash_v2" || model === "eleven_turbo_v2"
+          ? ["en"]
+          : null;
+  const languageParam = caps.languageCode;
+  const maxChars = caps.maxChars;
   return {
     provider: "elevenlabs",
     model,
     languages,
     ...(languageParam ? { language_param: "language_code" } : {}),
-    ...(maxChars ? { max_chars: maxChars } : {}),
+    max_chars: maxChars,
     formats: ["mp3", "pcm"],
     style: false,
     max_speakers: 1,

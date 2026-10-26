@@ -30,10 +30,13 @@ export function safeUrl(url: string): string {
   }
 }
 
+/** Query strings of http(s) URLs anywhere in a string (pre-signed URLs carry credentials). */
+const URL_QUERY = /(https?:\/\/[^\s?#]*)\?[^\s#]*/gi;
+
 function shorten(value: unknown, depth = 0): unknown {
   if (typeof value === "string") {
     if (value.startsWith("data:") || value.length > 400) return `<${value.length} chars>`;
-    return value;
+    return value.replace(URL_QUERY, "$1?[redacted]");
   }
   if (Array.isArray(value)) {
     const items = value.slice(0, 10).map((v) => shorten(v, depth + 1));
@@ -190,6 +193,11 @@ async function recordUsage(
   const usage = extractUsage(body, response.headers);
   for (const id of usage.ids) if (!run.ids.includes(id) && run.ids.length < 10) run.ids.push(id);
   if (!hasUsage(usage)) return;
+  if (usage.sources) {
+    usage.sources = Object.fromEntries(
+      Object.entries(usage.sources).map(([k, v]) => [k, `${host} ${v}`]),
+    );
+  }
   if (method === "GET") {
     // Polls repeat the job's running totals: keep the latest per endpoint family.
     run.getUsage.set(`${host}${path.replace(/[^/]{16,}/g, ":id")}`, usage);
