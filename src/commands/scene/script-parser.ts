@@ -126,6 +126,38 @@ function tokenize(text: string): Token[] {
   return tokens;
 }
 
+/** True when a run has spoken text, not only tags, spaces and punctuation. */
+const spoken = (run: Token[]) => run.some((t) => !t.tag && /[\p{L}\p{N}]/u.test(t.text));
+const tagOnly = (run: Token[]) => !spoken(run) && run.some((t) => t.tag);
+
+/**
+ * Join runs with no spoken text to the next run that has some, or, at the
+ * end, to the last one before them: a tag is never split from the words it
+ * shapes, so it never becomes a request of its own.
+ */
+function attachTags(runs: Token[][]): Token[][] {
+  const out: Token[][] = [];
+  let pending: Token[] = [];
+  for (const run of runs) {
+    if (!pending.length && !tagOnly(run)) {
+      out.push(run);
+      continue;
+    }
+    pending.push(...run);
+    if (spoken(run)) {
+      out.push(pending);
+      pending = [];
+    }
+  }
+  if (!pending.length) return out;
+  // Trailing tags: join them, and the spaces before them, to the last spoken run.
+  let lastSpoken = out.length - 1;
+  while (lastSpoken >= 0 && !spoken(out[lastSpoken] ?? [])) lastSpoken--;
+  if (lastSpoken < 0) return [...out, pending];
+  const tail = out.splice(lastSpoken).flat();
+  return [...out, [...tail, ...pending]];
+}
+
 /** Sentences as token runs; a sentence keeps the space that follows it. */
 function sentencesOf(tokens: Token[]): Token[][] {
   const sentences: Token[][] = [];
@@ -139,10 +171,13 @@ function sentencesOf(tokens: Token[]): Token[][] {
     }
   });
   if (current.length) sentences.push(current);
-  return sentences;
+  return attachTags(sentences);
 }
 
-/** Words and the spaces between them, each as its own token run. */
+/**
+ * Words and the spaces between them, each as its own token run; a tag goes
+ * with the word after it, or the word before it at the end of a sentence.
+ */
 function wordsOf(sentence: Token[]): Token[][] {
   const words: Token[][] = [];
   for (const t of sentence) {
@@ -150,15 +185,16 @@ function wordsOf(sentence: Token[]): Token[][] {
     if (t.space || !last || last[0]?.space) words.push([t]);
     else last.push(t);
   }
-  return words;
+  return attachTags(words);
 }
 
 const joined = (tokens: Token[]) => tokens.map((t) => t.text).join("");
 
 /**
  * Split `text` into parts of at most `maxChars` code points, at sentence,
- * then word boundaries. Tags are never cut: a single tag longer than the
- * limit becomes a part of its own, which planScenes reports as too long.
+ * then word boundaries, keeping each tag with a neighbouring word. Tags are
+ * never cut: only when a tag and its word together exceed the limit can a
+ * tag end up in a part with no spoken text, which partErrors rejects.
  */
 export function chunkText(text: string, maxChars: number): string[] {
   if (charCount(text) <= maxChars) return [text];
@@ -189,10 +225,21 @@ export function chunkText(text: string, maxChars: number): string[] {
     if (add(joined(sentence))) continue;
     for (const word of wordsOf(sentence)) {
       if (add(joined(word))) continue;
-      push();
-      if (word[0]?.space || add(joined(word))) continue;
-      // A single word longer than the limit: cut its text by code point.
+      if (word[0]?.space) {
+        push();
+        continue;
+      }
+      if (charCount(joined(word)) <= maxChars) {
+        push();
+        add(joined(word));
+        continue;
+      }
+      // A word (with its tags) longer than the limit: split it between its
+      // tokens, and cut a token's text by code point only if it alone is too long.
       for (const t of word) {
+        if (add(t.text)) continue;
+        push();
+        if (t.space || add(t.text)) continue;
         if (t.tag) addOrStart(t.text);
         else for (const ch of Array.from(t.text)) addOrStart(ch);
       }

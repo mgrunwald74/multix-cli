@@ -261,8 +261,8 @@ export function lineErrors(
 
 /**
  * Problems with the parts a line was split into: each part is sent as its own
- * request, so each must carry only whole tags (the same tags the line was
- * validated with) and fit the limit.
+ * request, so each must carry spoken text and only whole tags (the same tags
+ * the line was validated with) and fit the limit.
  */
 export function partErrors(text: string, parts: string[], limit: number): string[] {
   const errors: string[] = [];
@@ -270,6 +270,11 @@ export function partErrors(text: string, parts: string[], limit: number): string
   parts.forEach((part, i) => {
     const open = unclosedMarkup(part);
     if (open.length) errors.push(`${label(i)}unclosed tag ${open.join(" ")} would be read aloud`);
+    if (parts.length > 1 && !/[\p{L}\p{N}]/u.test(part.replace(/<[^<>]*>|\[[^[\]]*\]/gu, ""))) {
+      errors.push(
+        `${label(i)}has only tags and no spoken text; shorten the line or raise max_chars`,
+      );
+    }
     const n = charCount(part);
     if (n > limit) {
       errors.push(`${label(i)}${n} characters, over the limit of ${limit} (a tag cannot be split)`);
