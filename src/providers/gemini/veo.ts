@@ -1,0 +1,201 @@
+/**
+ * Veo video generation over the Gemini REST API.
+ * Contract (https://ai.google.dev/gemini-api/docs/veo):
+ *   POST /v1beta/models/{model}:predictLongRunning
+ *     { instances: [{ prompt, image?, lastFrame? }], parameters: { aspectRatio, resolution } }
+ *   Images use { bytesBase64Encoded, mimeType }, the shape Google's official
+ *   js-genai SDK sends to this endpoint.
+ *   GET  /v1beta/{operation.name} until done
+ *   video URI at response.generateVideoResponse.generatedSamples[0].video.uri,
+ *   downloaded with the same x-goog-api-key header when it is a Files API URI
+ *   (never forwarded to the storage host it redirects to).
+ */
+
+import fs from "node:fs";
+import { pollUntil } from "../../core/async-poll.js";
+import { HttpError, ProviderError, ValidationError } from "../../core/errors.js";
+import { downloadFile, httpJson } from "../../core/http-client.js";
+import type { Logger } from "../../core/logger.js";
+import { geminiFileNameFromUri } from "./client.js";
+import { withGeminiKey } from "./key-pool.js";
+import { getMimeType } from "./task-resolver.js";
+
+const API_HOST = "generativelanguage.googleapis.com";
+const BASE = `https://${API_HOST}/v1beta`;
+const VEO_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const VEO_TIMEOUT_MS = 10 * 60 * 1000;
+
+export interface VeoImage {
+  bytesBase64Encoded: string;
+  mimeType: string;
+}
+
+export interface VeoRequestOptions {
+  prompt: string;
+  image?: VeoImage;
+  lastFrame?: VeoImage;
+  aspectRatio: string;
+  resolution: string;
+}
+
+export interface VeoOperation {
+  name: string;
+  done?: boolean;
+  error?: unknown;
+  response?: Record<string, unknown>;
+}
+
+/** Read a local image as a Veo inlineData part. */
+export function veoImageFromFile(imgPath: string): VeoImage {
+  if (!fs.existsSync(imgPath)) throw new ValidationError(`Image not found: ${imgPath}`);
+  const detected = getMimeType(imgPath);
+  // Unknown extensions keep the historical JPEG assumption; known non-images are rejected.
+  const mimeType = detected === "application/octet-stream" ? "image/jpeg" : detected;
+  if (!VEO_IMAGE_TYPES.has(mimeType)) {
+    throw new ValidationError(`Veo accepts JPEG, PNG or WebP images: ${imgPath} (${mimeType})`);
+  }
+  return { bytesBase64Encoded: fs.readFileSync(imgPath).toString("base64"), mimeType };
+}
+
+/** Map `--reference-images` to opening/closing frames (at most two). */
+export function veoFramesFromPaths(paths: string[] = []): {
+  image?: VeoImage;
+  lastFrame?: VeoImage;
+} {
+  if (paths.length > 2) {
+    throw new ValidationError(
+      "--reference-images accepts at most two images (opening frame, closing frame)",
+    );
+  }
+  const [first, last] = paths;
+  return {
+    image: first ? veoImageFromFile(first) : undefined,
+    lastFrame: last ? veoImageFromFile(last) : undefined,
+  };
+}
+
+/** Accept both "veo-3.1-…" and "models/veo-3.1-…". */
+function modelPath(model: string): string {
+  return model.replace(/^models\//, "");
+}
+
+export function buildVeoRequest(opts: VeoRequestOptions): Record<string, unknown> {
+  const instance: Record<string, unknown> = { prompt: opts.prompt };
+  if (opts.image) instance.image = opts.image;
+  if (opts.lastFrame) instance.lastFrame = opts.lastFrame;
+  return {
+    instances: [instance],
+    parameters: { aspectRatio: opts.aspectRatio, resolution: opts.resolution },
+  };
+}
+
+/** Video URI from a finished operation; tolerates the SDK-style shapes too. */
+export function extractVeoVideoUri(op: VeoOperation): string | undefined {
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic API response
+  const r = (op.response ?? {}) as any;
+  return (
+    r.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ??
+    r.generatedSamples?.[0]?.video?.uri ??
+    r.generatedVideos?.[0]?.video?.uri
+  );
+}
+
+function headers(apiKey: string): Record<string, string> {
+  return { "x-goog-api-key": apiKey };
+}
+
+export async function submitVeo(
+  apiKey: string,
+  model: string,
+  body: Record<string, unknown>,
+): Promise<VeoOperation> {
+  try {
+    return await httpJson<VeoOperation>({
+      url: `${BASE}/models/${modelPath(model)}:predictLongRunning`,
+      method: "POST",
+      headers: headers(apiKey),
+      body,
+    });
+  } catch (e) {
+    // Keep HttpErrors intact so a 429 can rotate keys and keep its retry delay.
+    if (e instanceof HttpError) throw e;
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new ProviderError(`Veo submit failed: ${msg}`, "gemini");
+  }
+}
+
+/** Poll an operation to completion (bounded), returning the finished operation. */
+export async function waitForVeo(
+  apiKey: string,
+  operation: VeoOperation,
+  logger: Logger,
+  opts: { timeoutMs?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<VeoOperation> {
+  if (operation.done) return checkVeoResult(operation);
+  const finalOp = await pollUntil<VeoOperation>({
+    fetchStatus: ({ remainingMs }) =>
+      httpJson<VeoOperation>({
+        url: `${BASE}/${operation.name}`,
+        headers: headers(apiKey),
+        timeoutMs: Math.min(remainingMs, 60_000),
+      }),
+    isTerminal: (op) => op.done === true,
+    timeoutMs: opts.timeoutMs ?? VEO_TIMEOUT_MS,
+    intervalMs: opts.intervalMs ?? 10_000,
+    maxIntervalMs: 20_000,
+    sleep: opts.sleep,
+    onPoll: (op, attempt) => {
+      if (!op.done) logger.debug(`Still generating... (poll ${attempt})`);
+    },
+    resumeHint: `Operation (still running server-side): ${operation.name}`,
+  });
+  return checkVeoResult(finalOp);
+}
+
+function checkVeoResult(op: VeoOperation): VeoOperation {
+  if (op.error) throw new ProviderError(`Veo error: ${JSON.stringify(op.error)}`, "gemini");
+  return op;
+}
+
+/**
+ * Download the generated video. Gemini file URIs require the API key header;
+ * it is only attached for https:// Files API URIs on the Gemini API host
+ * (`/v1beta/files/<id>[:download]`), and downloadFile drops it when the API
+ * redirects to storage on another origin, so the key never goes to another
+ * host or over plain http. Any other URI is fetched without the key.
+ */
+export async function downloadVeoVideo(apiKey: string, uri: string, dest: string): Promise<void> {
+  if (!URL.canParse(uri)) throw new ProviderError("Veo returned an invalid video URI", "gemini");
+  const keyed = geminiFileNameFromUri(uri) !== null;
+  await downloadFile(uri, dest, 300_000, keyed ? headers(apiKey) : undefined);
+}
+
+/**
+ * Submit, wait, and download to `dest`. Returns the finished operation.
+ * Key rotation applies to the submit only: once a job is accepted, polling and
+ * download stay on that key (the operation belongs to it), so a later 429 can
+ * never start a second, separately billed job.
+ */
+export async function runVeo(
+  model: string,
+  request: VeoRequestOptions,
+  dest: string,
+  logger: Logger,
+): Promise<VeoOperation> {
+  const body = buildVeoRequest(request);
+  const { apiKey, operation } = await withGeminiKey(
+    async (key) => ({ apiKey: key, operation: await submitVeo(key, model, body) }),
+    { logger },
+  );
+  logger.debug(`Operation: ${operation.name}`);
+  const finalOp = await waitForVeo(apiKey, operation, logger);
+  const uri = extractVeoVideoUri(finalOp);
+  if (!uri) {
+    throw new ProviderError(
+      `Unexpected Veo response structure: ${JSON.stringify(finalOp.response)}`,
+      "gemini",
+    );
+  }
+  await downloadVeoVideo(apiKey, uri, dest);
+  return finalOp;
+}

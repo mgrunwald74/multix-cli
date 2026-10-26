@@ -7,29 +7,23 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { ValidationError } from "../../../core/errors.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { extractImages, generateContent } from "../client.js";
+import { withGeminiKey } from "../key-pool.js";
 import {
   ASPECT_RATIOS,
   type AspectRatio,
   IMAGE_SIZES,
   type ImageSize,
   getDefaultModel,
-  resolveImageOptions,
 } from "../models.js";
-
-export function buildImageGenerationConfig(
-  model: string,
-  aspectRatio: AspectRatio,
-  size?: ImageSize,
-): Record<string, unknown> {
-  const imageOptions = resolveImageOptions(model, aspectRatio, size);
-  return {
-    responseModalities: ["IMAGE"],
-    imageConfig: imageOptions,
-  };
-}
 
 export function registerGenerateCommand(parent: Command): void {
   parent
@@ -41,6 +35,8 @@ export function registerGenerateCommand(parent: Command): void {
     .option("--num-images <n>", "Number of images to generate (1-4)", "1")
     .option("--size <sz>", `Image size (${IMAGE_SIZES.join("|")})`)
     .option("--output <path>", "Copy first generated image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -50,6 +46,8 @@ export function registerGenerateCommand(parent: Command): void {
         numImages: string;
         size?: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
@@ -71,21 +69,31 @@ export function registerGenerateCommand(parent: Command): void {
         logger.debug(`Generating ${numImages} image(s) with model: ${model}`);
         logger.debug(`Aspect ratio: ${opts.aspectRatio}${opts.size ? `, size: ${opts.size}` : ""}`);
 
-        const generationConfig = buildImageGenerationConfig(
-          model,
-          opts.aspectRatio as AspectRatio,
-          opts.size as ImageSize | undefined,
-        );
+        // Build image config
+        const imageConfig: Record<string, string> = { aspectRatio: opts.aspectRatio };
+        if (opts.size) imageConfig.imageSize = opts.size;
+
+        const generationConfig: Record<string, unknown> = {
+          responseModalities: ["IMAGE"],
+          imageConfig,
+        };
 
         const savedFiles: string[] = [];
 
         for (let i = 0; i < numImages; i++) {
           try {
-            const resp = await generateContent({
-              model,
-              contents: [{ parts: [{ text: opts.prompt }] }],
-              generationConfig,
-            });
+            const resp = await withGeminiKey(
+              (apiKey) =>
+                generateContent(
+                  {
+                    model,
+                    contents: [{ parts: [{ text: opts.prompt }] }],
+                    generationConfig,
+                  },
+                  { apiKey, logger },
+                ),
+              { logger },
+            );
 
             const images = extractImages(resp);
             if (images.length === 0) {
@@ -98,7 +106,7 @@ export function registerGenerateCommand(parent: Command): void {
             for (const img of images) {
               const outDir = getOutputDir();
               const ext = img.mimeType.includes("png") ? "png" : "jpg";
-              const fname = `gemini_generated_${Date.now()}_${i}.${ext}`;
+              const fname = `gemini_generated_${outputStamp()}_${i}.${ext}`;
               const dest = path.join(outDir, fname);
               fs.writeFileSync(dest, Buffer.from(img.data, "base64"));
               savedFiles.push(dest);
@@ -123,8 +131,9 @@ export function registerGenerateCommand(parent: Command): void {
           logger.success(`Copied to: ${opts.output}`);
         }
 
-        console.log(`\nGenerated ${savedFiles.length} image(s):`);
-        for (const f of savedFiles) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(savedFiles, { ...opts, logger });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
       },
     );
 }

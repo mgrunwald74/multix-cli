@@ -1,0 +1,87 @@
+// multix remote MCP server. Separate from docs-site/wrangler.jsonc (the docs site).
+// Secrets are never stored here: set them with `npx wrangler secret put <NAME>`:
+//   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET   GitHub OAuth App (callback: <origin>/oauth/github/callback)
+//   SESSION_SECRET                           32+ random characters
+//   SECRETS_ENCRYPTION_KEY                   base64 of 32 random bytes (openssl rand -base64 32)
+//   MULTIX_ALLOWED_USERS                     GitHub logins or verified emails allowed to sign in
+//                                            (comma-separated; a secret so emails stay out of git)
+// Provider keys and R2 bucket settings are not Worker secrets: each account saves its own in /dashboard.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "multix-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // No nodejs_compat: the bundle must not depend on Node built-ins.
+  // global_fetch_strictly_public: required for MCP Client ID Metadata Documents (URL client ids).
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "observability": { "enabled": true },
+  "workers_dev": false,
+  // multix.zuey.me itself is the docs site's Custom Domain. These routes run before it,
+  // so only the MCP, OAuth, dashboard and REST API paths reach this Worker. Patterns match
+  // the query string too, so a path without a trailing `*` misses `/dashboard?notice=…`.
+  "routes": [
+    { "pattern": "multix.zuey.me/mcp*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/dashboard*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/oauth/*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/.well-known/oauth-*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/health*", "zone_name": "zuey.me" },
+    { "pattern": "multix.zuey.me/api/*", "zone_name": "zuey.me" }
+  ],
+  "kv_namespaces": [
+    // OAuth clients, grants and tokens (hashed / encrypted by workers-oauth-provider).
+    { "binding": "OAUTH_KV", "id": "fcd61b4086be4e7292c7f5035f4024a7" },
+    // Accounts and their AES-GCM encrypted provider keys.
+    { "binding": "ACCOUNTS_KV", "id": "2a5452266a1f477d9a374a56525a81f9" }
+  ],
+  // Approximate limits: Workers rate limiting is per Cloudflare location and
+  // eventually consistent, so it is not an exact budget. namespace_id must be
+  // unique per account: pick other integers if another Worker already uses these.
+  "ratelimits": [
+    // Per account on /mcp.
+    { "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
+    // Per IP on sign-in, authorization, token, registration and dashboard writes.
+    { "name": "AUTH_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+  ],
+  // multix_run: one container per job, owned by the MultixJobContainer Durable Object
+  // (worker/src/jobs/multix-job-container.ts). Needs the Workers Paid plan, and Docker
+  // running locally at `wrangler deploy` (it builds ./container/Dockerfile with the
+  // repository root as build context).
+  "containers": [
+    {
+      "class_name": "MultixJobContainer",
+      "image": "./container/Dockerfile",
+      "image_build_context": "..",
+      "instance_type": "basic",
+      // Platform ceiling on job containers. MULTIX_MAX_JOBS_TOTAL (below) is the cap the
+      // Worker enforces; keep it at or under this value. The deploy workflow applies
+      // changes to instance_type and max_instances on its own.
+      "max_instances": 10
+    }
+  ],
+  // MULTIX_JOB_QUOTA: one small Durable Object per account holding its active job slots
+  // (worker/src/jobs/account-job-quota.ts), so the per-account cap is strongly consistent.
+  // MULTIX_EVENTS: one Durable Object per account holding its job event subscriptions and
+  // webhook deliveries (worker/src/events/account-events.ts).
+  "durable_objects": {
+    "bindings": [
+      { "name": "MULTIX_JOBS", "class_name": "MultixJobContainer" },
+      { "name": "MULTIX_JOB_QUOTA", "class_name": "AccountJobQuota" },
+      { "name": "MULTIX_EVENTS", "class_name": "AccountEvents" }
+    ]
+  },
+  // Declarative Durable Object config (wrangler 4.149+); replaces `migrations`.
+  "exports": {
+    "MultixJobContainer": { "type": "durable-object", "storage": "sqlite" },
+    "AccountJobQuota": { "type": "durable-object", "storage": "sqlite" },
+    "AccountEvents": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "vars": {
+    "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
+    "MULTIX_MCP_MAX_OUTPUTS": "4",
+    "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
+    "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p",
+    // multix_run jobs running at once: per account, and across the server.
+    "MULTIX_MAX_JOBS_PER_ACCOUNT": "2",
+    "MULTIX_MAX_JOBS_TOTAL": "10"
+  }
+}

@@ -3,17 +3,32 @@
  * Mirrors the Python source model registry.
  */
 
+import { envDefault } from "../../core/env-default.js";
+
 /** Default image generation model (Nano Banana 2 — fastest, ~95% Pro quality). */
 export const IMAGE_MODEL_DEFAULT = "gemini-3.1-flash-image-preview";
 
 /** Fallback if default image model fails. */
 export const IMAGE_MODEL_FALLBACK = "gemini-2.5-flash-image";
 
-/** Nano Banana 2 Lite — the stable, 1K-only low-latency image model. */
-export const IMAGE_MODEL_LITE = "gemini-3.1-flash-lite-image";
+/** GA Gemini Omni Flash video model (Interactions API), the replacement for the Veo 3.1 previews. */
+export const GEMINI_OMNI_MODEL_DEFAULT = "gemini-omni-1.1-flash";
 
-/** Default video generation model (Veo). */
-export const VIDEO_MODEL_DEFAULT = "veo-3.1-generate-preview";
+/** Default video generation model. */
+export const VIDEO_MODEL_DEFAULT = GEMINI_OMNI_MODEL_DEFAULT;
+
+/** Google shuts the Veo 3.1 preview models down on the Gemini API on this date. */
+export const VEO_PREVIEW_SHUTDOWN_DATE = "2026-10-22";
+
+/** Gemini Omni video models go through the Interactions API (`omni.ts`). */
+export function isOmniVideoModel(model: string): boolean {
+  return /^(models\/)?gemini-omni-/.test(model);
+}
+
+/** Veo models go through predictLongRunning (`veo.ts`). */
+export function isVeoVideoModel(model: string): boolean {
+  return /^(models\/)?veo-/.test(model);
+}
 
 /** Default text-output model for multimodal analysis, transcription, extraction, and docs. */
 export const TEXT_MODEL_DEFAULT = "gemini-3.6-flash";
@@ -22,7 +37,7 @@ export const TEXT_MODEL_DEFAULT = "gemini-3.6-flash";
 export const ANALYSIS_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
 
 /** Default TTS model. */
-export const TTS_MODEL_DEFAULT = "gemini-3.1-flash-tts-preview";
+export const TTS_MODEL_DEFAULT = "gemini-3.8-flash-lite-tts";
 
 /** Default document conversion model. */
 export const DOC_MODEL_DEFAULT = TEXT_MODEL_DEFAULT;
@@ -40,11 +55,10 @@ export const GEMINI_IMAGE_MODELS = new Set([
   "gemini-3-pro-image-preview",
   "gemini-2.5-flash-image",
   "gemini-2.5-flash-image-preview",
-  IMAGE_MODEL_LITE,
   ...IMAGEN_MODELS,
 ]);
 
-/** Supported aspect ratios for image/video generation. */
+/** Supported aspect ratios for image generation (video models have their own lists). */
 export const ASPECT_RATIOS = [
   "1:1",
   "2:3",
@@ -63,38 +77,22 @@ export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 export const IMAGE_SIZES = ["1K", "2K", "4K"] as const;
 export type ImageSize = (typeof IMAGE_SIZES)[number];
 
-/** Resolve model-aware image options without altering existing model defaults. */
-export function resolveImageOptions(
-  model: string,
-  aspectRatio: AspectRatio,
-  requestedSize?: ImageSize,
-): { aspectRatio: AspectRatio; imageSize?: ImageSize } {
-  if (model !== IMAGE_MODEL_LITE) {
-    return { aspectRatio, ...(requestedSize ? { imageSize: requestedSize } : {}) };
-  }
-
-  if (requestedSize && requestedSize !== "1K") {
-    throw new Error(`${IMAGE_MODEL_LITE} supports only 1K image output.`);
-  }
-
-  return { aspectRatio, imageSize: "1K" };
-}
-
 /**
  * Get default model for a given task, with env overrides matching the Python source.
  */
 export function getDefaultModel(
   task: "generate" | "generate-video" | "generate-speech" | "analyze" | "transcribe" | "extract",
 ): string {
+  // A blank name (as in a copied .env.example) falls through to the next one.
   if (task === "generate") {
-    return process.env.IMAGE_GEN_MODEL ?? process.env.GEMINI_IMAGE_GEN_MODEL ?? IMAGE_MODEL_DEFAULT;
+    return envDefault("IMAGE_GEN_MODEL", envDefault("GEMINI_IMAGE_GEN_MODEL", IMAGE_MODEL_DEFAULT));
   }
   if (task === "generate-video") {
-    return process.env.VIDEO_GEN_MODEL ?? VIDEO_MODEL_DEFAULT;
+    return envDefault("VIDEO_GEN_MODEL", VIDEO_MODEL_DEFAULT);
   }
   if (task === "generate-speech") {
-    return process.env.GEMINI_TTS_MODEL ?? process.env.TTS_MODEL ?? TTS_MODEL_DEFAULT;
+    return envDefault("GEMINI_TTS_MODEL", envDefault("TTS_MODEL", TTS_MODEL_DEFAULT));
   }
   // analyze / transcribe / extract
-  return process.env.MULTIMODAL_MODEL ?? process.env.GEMINI_MODEL ?? ANALYSIS_MODEL_DEFAULT;
+  return envDefault("MULTIMODAL_MODEL", envDefault("GEMINI_MODEL", ANALYSIS_MODEL_DEFAULT));
 }

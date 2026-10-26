@@ -4,14 +4,32 @@
  * Sourced from https://docs.leonardo.ai/llms.txt — keep in sync.
  */
 
+import { envDefault } from "../../core/env-default.js";
+
 export const DEFAULT_LEONARDO_BASE_URL = "https://cloud.leonardo.ai/api/rest/v1";
+
+/**
+ * Base URL override and the key env names in the order the provider reads
+ * them (first non-blank wins). Shared by the key lookup, the base URL trust
+ * check and `multix check`, so the three cannot drift apart.
+ */
+export const LEONARDO_ROUTING = {
+  name: "LEONARDO_BASE_URL",
+  defaultUrl: DEFAULT_LEONARDO_BASE_URL,
+  keyEnvs: ["LEONARDO_API_KEY"],
+} as const;
 
 // Lucid Origin — fast, broadly available default image model.
 export const DEFAULT_LEONARDO_MODEL_ID = "7b592283-e8a7-4c5a-9ba6-d18c31f258b9";
 
+// Env-backed fields are getters: read when a command runs, after loadEnv().
 export const LEONARDO_DEFAULTS = {
-  modelId: process.env.LEONARDO_DEFAULT_MODEL ?? DEFAULT_LEONARDO_MODEL_ID,
-  videoModel: process.env.LEONARDO_VIDEO_MODEL ?? "MOTION2",
+  get modelId() {
+    return envDefault("LEONARDO_DEFAULT_MODEL", DEFAULT_LEONARDO_MODEL_ID);
+  },
+  get videoModel() {
+    return envDefault("LEONARDO_VIDEO_MODEL", "MOTION2");
+  },
   width: 1024,
   height: 1024,
   numImages: 1,

@@ -12,6 +12,11 @@ To configure multix, set at least one provider API key:
     MiniMax            : https://platform.minimax.io/user-center/basic-information/interface-key
     Leonardo.Ai        : https://app.leonardo.ai/settings/api-keys
     BytePlus           : https://console.byteplus.com/auth/api-keys
+    fal.ai             : https://fal.ai/dashboard/keys
+    Atlas Cloud        : https://www.atlascloud.ai/console/api-keys
+    Replicate          : https://replicate.com/account/api-tokens
+    Runway             : https://dev.runwayml.com/
+    HeyGen             : https://app.heygen.com/developers/api
 
   Option A — user global config (recommended):
     echo 'GEMINI_API_KEY=your-key' >> ~/.multix/.env

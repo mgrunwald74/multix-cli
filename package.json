@@ -1,7 +1,7 @@
 {
   "name": "@mrgoonie/multix",
-  "version": "0.1.0-beta.2",
-  "description": "AI multimodal CLI — OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, ffmpeg, ImageMagick, doc-to-md",
+  "version": "1.17.1",
+  "description": "AI multimodal CLI — OpenAI, Gemini, MiniMax, OpenRouter, Leonardo, BytePlus, ElevenLabs, fal.ai, Atlas Cloud, Replicate, Runway, HeyGen, ffmpeg, ImageMagick, doc-to-md",
   "type": "module",
   "bin": {
     "multix": "./dist/cli.js"
@@ -10,8 +10,9 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -26,6 +27,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "build:docs": "npm run build --prefix docs-site",
     "dev": "tsup --watch",
     "start": "node dist/cli.js",
     "lint": "biome check .",
@@ -33,7 +35,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:smoke": "vitest run tests/smoke"
+    "test:smoke": "vitest run tests/smoke",
+    "verify:docs": "npm run verify --prefix docs-site",
+    "dev:mcp": "npm run dev --prefix worker",
+    "deploy:mcp": "npm run deploy --prefix worker",
+    "test:mcp": "npm test --prefix worker",
+    "check:mcp": "npm run typecheck --prefix worker && npm test --prefix worker && npm run check:bundle --prefix worker"
   },
   "keywords": [
     "cli",
@@ -45,6 +52,14 @@
     "openrouter",
     "leonardo",
     "leonardo-ai",
+    "fal",
+    "fal-ai",
+    "atlascloud",
+    "replicate",
+    "runway",
+    "heygen",
+    "ai-avatar",
+    "video-translation",
     "ffmpeg",
     "imagemagick",
     "media",
@@ -68,7 +83,6 @@
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
     "execa": "^9.4.0",
-    "undici": "^7.2.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -76,6 +90,6 @@
     "@types/node": "^22.10.0",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.11"
   }
 }

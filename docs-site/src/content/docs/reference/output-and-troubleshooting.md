@@ -1,0 +1,44 @@
+---
+title: Output and troubleshooting
+description: Verify multix prerequisites, control generated files, and diagnose common CLI failures.
+---
+
+## Verify the local setup
+
+```bash
+multix check
+multix check --verbose
+```
+
+`check` validates available credentials and local media tooling. Media commands
+need `ffmpeg`; commands that use ImageMagick need `magick` on your `PATH`.
+
+## Output files
+
+Generated files default to `./multix-output`. Set `MULTIX_OUTPUT_DIR` to change
+the default, or use the command's `--output` option when available.
+Timestamp-based default file names include a millisecond timestamp and a random
+suffix (for example `veo_generated_1760955000000-3f9a1c07.mp4`), so parallel runs
+that share an output directory do not overwrite each other's files. Job-based
+names use the provider's job or request ID instead.
+
+```bash
+multix media optimize --input source.mp4 --output optimized.mp4 --target-size 100
+```
+
+## Image format
+
+Image `generate` and `image-to-image` commands convert results to WebP by default (`cwebp -q 85 -m 6 -metadata none`), verify that size and transparency are unchanged, and delete only the intermediate file the CLI wrote. Keep the provider's original format/quality with `--image-format original`, `--no-webp`, `MULTIX_IMAGE_FORMAT=original`, or an `--output` path with a non-WebP extension such as `hero.png`. Without `cwebp` on `PATH`, the original file is kept with a warning.
+
+## Common fixes
+
+- **No provider available:** set at least one supported provider key and rerun
+  `multix check`.
+- **Media command cannot start:** install `ffmpeg`, and ImageMagick 7+ when the
+  command needs it.
+- **Authentication error:** confirm the key is from the intended provider and
+  that the process can see it (`multix check --verbose`).
+- **Generation takes time:** video and some provider operations are async; use
+  the matching status command where the provider exposes one.
+
+Use `--help` on the exact command to inspect the current flags and defaults.

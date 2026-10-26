@@ -8,7 +8,7 @@
  */
 
 import type { Command } from "commander";
-import { resolveKey } from "../../../core/env-loader.js";
+import { envDefault } from "../../../core/env-default.js";
 import { createLogger } from "../../../core/logger.js";
 import { PollFailedError, PollTimeoutError, poll } from "../../leonardo/poll.js";
 import { type OpenRouterVideoPollResponse, pollVideoJob, submitVideoJob } from "../video-client.js";
@@ -18,7 +18,9 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
   parent
     .command("image-to-video")
     .alias("i2v")
-    .description("Submit an image-to-video job to OpenRouter (async, returns job id)")
+    .description(
+      "Generate video from an image via OpenRouter (image-to-video, async); models: Veo, Seedance, Kling — use video-models to list all",
+    )
     .requiredOption("--prompt <text>", "Motion/scene prompt")
     .requiredOption("--image-url <url>", "First-frame image URL (https)")
     .option("--last-frame-url <url>", "Optional last-frame image URL")
@@ -51,7 +53,7 @@ export function registerOpenRouterImageToVideoCommand(parent: Command): void {
         verbose?: boolean;
       }) => {
         const logger = createLogger({ verbose: opts.verbose ?? false });
-        const model = opts.model ?? resolveKey("OPENROUTER_VIDEO_MODEL") ?? "google/veo-3.1";
+        const model = opts.model ?? envDefault("OPENROUTER_VIDEO_MODEL", "google/veo-3.1");
 
         const frame_images: Array<Record<string, unknown>> = [
           {

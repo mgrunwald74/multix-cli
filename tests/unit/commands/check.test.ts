@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -60,9 +63,57 @@ describe("binary-check helper", () => {
     const result = await checkBinary("zzz_multix_fake_binary_xyz");
     expect(result.available).toBe(false);
   });
+
+  it("passes a custom version flag through to the binary", async () => {
+    const { checkBinary } = await import("../../../src/commands/check-helpers/binary-check.js");
+    const result = await checkBinary("node", "-v");
+    expect(result.available).toBe(true);
+    expect(result.version).toMatch(/^v\d+\./);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "detects a binary that rejects --version with 'not found' in stderr",
+    async () => {
+      // Regression: ffmpeg 8.x exits non-zero on `--version` with
+      // "Error splitting the argument list: Option not found". The stderr
+      // substring test used to read that as a missing binary.
+      const { checkBinary } = await import("../../../src/commands/check-helpers/binary-check.js");
+      const dir = await mkdtemp(join(tmpdir(), "multix-binary-check-"));
+      const fake = join(dir, "fake-ffmpeg");
+      await writeFile(
+        fake,
+        [
+          "#!/bin/sh",
+          'if [ "$1" = "-version" ]; then',
+          '  echo "fake-ffmpeg version 8.1.2"',
+          "  exit 0",
+          "fi",
+          'echo "Error splitting the argument list: Option not found" >&2',
+          "exit 8",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+
+      try {
+        const withDefaultFlag = await checkBinary(fake);
+        expect(withDefaultFlag.available).toBe(false); // the old, wrong answer
+
+        const withCorrectFlag = await checkBinary(fake, "-version");
+        expect(withCorrectFlag.available).toBe(true);
+        expect(withCorrectFlag.version).toBe("fake-ffmpeg version 8.1.2");
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe("check command provider readiness", () => {
+  // Restore env even when an assertion fails mid-test.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("includes OpenAI in provider diagnostics", async () => {
     const { getCheckProviders } = await import("../../../src/commands/check.js");
     expect(getCheckProviders()).toContainEqual(
@@ -88,5 +139,68 @@ describe("check command provider readiness", () => {
 
     await expect(checkCodexImageReadiness(true, true, checker)).resolves.toBe(true);
     expect(checker).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports Cloudflare native and video readiness separately", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+    const { cloudflareReadiness } = await import("../../../src/commands/check.js");
+    expect(cloudflareReadiness()).toMatchObject({ native: true, video: false });
+
+    vi.stubEnv("CLOUDFLARE_AI_GATEWAY_ID", "gateway");
+    vi.stubEnv("REPLICATE_API_TOKEN", "replicate");
+    expect(cloudflareReadiness()).toMatchObject({ native: true, video: true });
+  });
+
+  it("reports direct Replicate readiness separately from Cloudflare AI Gateway video", async () => {
+    const { getCheckProviders, cloudflareReadiness } = await import(
+      "../../../src/commands/check.js"
+    );
+    expect(getCheckProviders()).toContainEqual(
+      expect.objectContaining({
+        name: "Replicate",
+        envPrimary: "REPLICATE_API_TOKEN",
+        envFallback: "REPLICATE_API_KEY",
+        optional: true,
+      }),
+    );
+    // A Replicate token alone does not make Cloudflare video ready.
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "");
+    vi.stubEnv("REPLICATE_API_TOKEN", "replicate");
+    expect(cloudflareReadiness()).toMatchObject({ native: false, video: false });
+  });
+
+  it("resolves Replicate tokens like the provider: trimmed, then fallback", async () => {
+    const { getCheckProviders, resolveProviderKey } = await import(
+      "../../../src/commands/check.js"
+    );
+    const replicate = getCheckProviders().find((p) => p.name === "Replicate");
+    if (!replicate) throw new Error("Replicate provider entry missing");
+    vi.stubEnv("REPLICATE_API_TOKEN", "   ");
+    vi.stubEnv("REPLICATE_API_KEY", " key-value ");
+    expect(resolveProviderKey(replicate)).toEqual({
+      key: "key-value",
+      envUsed: "REPLICATE_API_KEY",
+    });
+    vi.stubEnv("REPLICATE_API_KEY", "");
+    expect(resolveProviderKey(replicate)).toEqual({});
+  });
+
+  it("does not let REPLICATE_API_KEY alone make Cloudflare video ready", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "account");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "token");
+    vi.stubEnv("CLOUDFLARE_AI_GATEWAY_ID", "gateway");
+    vi.stubEnv("REPLICATE_API_TOKEN", "");
+    vi.stubEnv("REPLICATE_API_KEY", "replicate-key");
+    const { cloudflareReadiness } = await import("../../../src/commands/check.js");
+    expect(cloudflareReadiness()).toMatchObject({ native: true, video: false });
+  });
+
+  it("does not count whitespace-only Cloudflare credentials as configured", async () => {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "   ");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "\t");
+    const { cloudflareReadiness } = await import("../../../src/commands/check.js");
+    expect(cloudflareReadiness()).toMatchObject({ native: false, video: false });
   });
 });

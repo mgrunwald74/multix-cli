@@ -14,12 +14,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { envDefault } from "../../../core/env-default.js";
 import { resolveKey } from "../../../core/env-loader.js";
 import { ProviderError, ValidationError } from "../../../core/errors.js";
 import { fetchBytes, httpJson } from "../../../core/http-client.js";
 import { refUrl, resolveImageInput } from "../../../core/image-input.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { type Logger, createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import { OPENROUTER_API_URL, requireOpenRouterKey } from "../client.js";
 import {
   buildI2IPayload,
@@ -36,7 +43,9 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
   parent
     .command("image-to-image")
     .alias("i2i")
-    .description("Edit/transform images via OpenRouter (default: google/gemini-2.5-flash-image)")
+    .description(
+      "Edit/transform images via OpenRouter (image-to-image); models: Gemini, GPT-Image, Flux, Recraft, Seedream",
+    )
     .requiredOption("--prompt <text>", "Text prompt describing the edit")
     .requiredOption(
       "--ref <path>",
@@ -47,6 +56,8 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
     .option("-m, --model <id>", `OpenRouter model id (default ${DEFAULT_MODEL})`)
     .option("--strength <n>", "Recraft init-image strength 0..1 (Recraft models only)")
     .option("--output <path>", "Save first generated image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
@@ -55,13 +66,15 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
         model?: string;
         strength?: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         if (!opts.ref || opts.ref.length === 0) {
           throw new ValidationError("At least one --ref is required for image-to-image.");
         }
         const logger = createLogger({ verbose: opts.verbose ?? false });
-        const model = opts.model ?? resolveKey("OPENROUTER_IMAGE_MODEL") ?? DEFAULT_MODEL;
+        const model = opts.model ?? envDefault("OPENROUTER_IMAGE_MODEL", DEFAULT_MODEL);
         const strength = parseStrength(opts.strength);
 
         const fallbackModels = (resolveKey("OPENROUTER_FALLBACK_MODELS") ?? "")
@@ -95,8 +108,9 @@ export function registerOpenRouterImageToImageCommand(parent: Command): void {
           logger,
         });
 
-        console.log(`\nGenerated ${saved.length} image(s):`);
-        for (const f of saved) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(saved, { ...opts, logger });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
         console.log(`Model used: ${model}`);
       },
     );
@@ -150,7 +164,7 @@ async function runImageToImage(opts: RunOpts): Promise<string[]> {
   }
 
   const outDir = getOutputDir();
-  const ts = Date.now();
+  const ts = outputStamp();
   const saved: string[] = [];
   for (let i = 0; i < parsed.urls.length; i++) {
     const url = parsed.urls[i];

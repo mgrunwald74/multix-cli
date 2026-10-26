@@ -68,6 +68,18 @@ export function detectThumbUrl(obj: unknown): string | null {
 }
 
 /**
+ * Downloads `url` to `dest`; lets a caller apply its own transport and naming
+ * policy. A result with a string `dest` names the file actually used (e.g. a
+ * free name beside `dest`, or a thumbnail that was already saved).
+ */
+export type ThumbDownloader = (url: string, dest: string) => Promise<unknown>;
+
+function resultDest(result: unknown): string | undefined {
+  const dest = (result as { dest?: unknown } | null | undefined)?.dest;
+  return typeof dest === "string" ? dest : undefined;
+}
+
+/**
  * Derive a `<base>_thumb.<ext>` path next to `videoPath` and download `thumbUrl`.
  * Extension comes from the URL when recognizable, otherwise falls back to .jpg.
  * Returns the saved path on success, null on failure (logged as warn).
@@ -76,14 +88,15 @@ export async function downloadThumbBeside(
   thumbUrl: string,
   videoPath: string,
   logger?: Logger,
+  download: ThumbDownloader = downloadFile,
 ): Promise<string | null> {
   const match = thumbUrl.match(IMAGE_EXT_RE);
   const ext = match?.[1] ? match[1].toLowerCase().replace("jpeg", "jpg") : "jpg";
   const dir = path.dirname(videoPath);
   const base = path.basename(videoPath, path.extname(videoPath));
-  const dest = path.join(dir, `${base}_thumb.${ext}`);
+  const planned = path.join(dir, `${base}_thumb.${ext}`);
   try {
-    await downloadFile(thumbUrl, dest);
+    const dest = resultDest(await download(thumbUrl, planned)) ?? planned;
     logger?.success(`Saved thumb ${dest}`);
     return dest;
   } catch (e) {
@@ -99,7 +112,7 @@ export async function downloadThumbBeside(
 export async function maybeDownloadThumb(
   source: unknown,
   videoPath: string,
-  opts: { skip?: boolean; copyTo?: string; logger?: Logger } = {},
+  opts: { skip?: boolean; copyTo?: string; logger?: Logger; download?: ThumbDownloader } = {},
 ): Promise<string | null> {
   if (opts.skip) return null;
   const url = detectThumbUrl(source);
@@ -107,7 +120,7 @@ export async function maybeDownloadThumb(
     opts.logger?.debug("No thumbnail URL detected in provider response");
     return null;
   }
-  const saved = await downloadThumbBeside(url, videoPath, opts.logger);
+  const saved = await downloadThumbBeside(url, videoPath, opts.logger, opts.download);
   if (saved && opts.copyTo) {
     const copyExt = path.extname(saved);
     const copyBase = path.basename(opts.copyTo, path.extname(opts.copyTo));

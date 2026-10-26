@@ -7,6 +7,60 @@ on:
     branches: [main]
 
 jobs:
+  docs:
+    name: Documentation site
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install documentation dependencies
+        run: npm ci --prefix docs-site
+
+      - name: Verify documentation site
+        run: npm run verify --prefix docs-site
+
+  mcp-worker:
+    name: MCP Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+
+      # The catalog and argv tests load the CLI's own commander tree from src/.
+      - name: Install CLI dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install worker dependencies
+        run: npm ci --prefix worker
+
+      - name: Type check
+        run: npm run typecheck --prefix worker
+
+      - name: Test
+        run: npm test --prefix worker
+
+      - name: Bundle check (no Node-only or CLI code)
+        run: npm run check:bundle --prefix worker
+
   ci:
     name: CI — Node ${{ matrix.node-version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

@@ -7,39 +7,27 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
 import { resolveImageInput } from "../../../core/image-input.js";
+import {
+  finalizeGeneratedImages,
+  imageFormatOption,
+  noWebpOption,
+} from "../../../core/image-webp-finalize.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
+import { outputStamp } from "../../../core/output-name.js";
 import {
   type ContentPart,
   type GenerateContentRequest,
   extractImages,
   generateContent,
 } from "../client.js";
-import {
-  ASPECT_RATIOS,
-  type AspectRatio,
-  IMAGE_MODEL_FALLBACK,
-  IMAGE_MODEL_LITE,
-  IMAGE_SIZES,
-  type ImageSize,
-  resolveImageOptions,
-} from "../models.js";
+import { withGeminiKey } from "../key-pool.js";
+import { IMAGE_MODEL_FALLBACK } from "../models.js";
 
 // Gemini inline data has a practical ~7MB request cap. Stay well under that
 // per-image so multi-ref still fits.
 const SOFT_LIMIT_BYTES = 5 * 1024 * 1024;
 const HARD_LIMIT_BYTES = 7 * 1024 * 1024;
-
-export function buildImageToImageGenerationConfig(
-  model: string,
-  aspectRatio: AspectRatio,
-  size?: ImageSize,
-): Record<string, unknown> | undefined {
-  const imageOptions = resolveImageOptions(model, aspectRatio, size);
-  return imageOptions.imageSize
-    ? { responseModalities: ["IMAGE"], imageConfig: imageOptions }
-    : undefined;
-}
 
 export function registerGeminiImageToImageCommand(parent: Command): void {
   parent
@@ -56,18 +44,18 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
       [] as string[],
     )
     .option("-m, --model <id>", `Gemini image model (default ${IMAGE_MODEL_FALLBACK})`)
-    .option("--aspect-ratio <ratio>", `Aspect ratio (${ASPECT_RATIOS.join("|")})`, "1:1")
-    .option("--size <sz>", `Image size (${IMAGE_SIZES.join("|")})`)
     .option("--output <path>", "Save first generated image to this path")
+    .addOption(imageFormatOption())
+    .addOption(noWebpOption())
     .option("-v, --verbose", "Verbose logging")
     .action(
       async (opts: {
         prompt: string;
         ref: string[];
         model?: string;
-        aspectRatio: string;
-        size?: string;
         output?: string;
+        imageFormat?: string;
+        webp?: boolean;
         verbose?: boolean;
       }) => {
         if (!opts.ref || opts.ref.length === 0) {
@@ -75,21 +63,6 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
         }
         const logger = createLogger({ verbose: opts.verbose ?? false });
         const model = opts.model ?? IMAGE_MODEL_FALLBACK;
-
-        if (model === IMAGE_MODEL_LITE && opts.ref.length > 1) {
-          logger.warn(
-            `${IMAGE_MODEL_LITE} is not optimized for multiple reference images; use one when possible.`,
-          );
-        }
-
-        if (!ASPECT_RATIOS.includes(opts.aspectRatio as AspectRatio)) {
-          throw new Error(
-            `Invalid aspect ratio: ${opts.aspectRatio}. Valid: ${ASPECT_RATIOS.join(", ")}`,
-          );
-        }
-        if (opts.size && !IMAGE_SIZES.includes(opts.size as ImageSize)) {
-          throw new Error(`Invalid size: ${opts.size}. Valid: ${IMAGE_SIZES.join(", ")}`);
-        }
 
         // Resolve refs → inlineData parts. URLs are downloaded by Gemini differently;
         // we always inline for consistent behavior across both URL and local refs.
@@ -120,18 +93,15 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
 
         logger.debug(`Calling ${model} with ${opts.ref.length} reference image(s)`);
 
-        const generationConfig = buildImageToImageGenerationConfig(
-          model,
-          opts.aspectRatio as AspectRatio,
-          opts.size as ImageSize | undefined,
-        );
         const req: GenerateContentRequest = {
           model,
           contents: [{ parts }],
-          ...(generationConfig ? { generationConfig } : {}),
+          generationConfig: { responseModalities: ["IMAGE"] },
         };
 
-        const resp = await generateContent(req);
+        const resp = await withGeminiKey((apiKey) => generateContent(req, { apiKey, logger }), {
+          logger,
+        });
         const images = extractImages(resp);
         if (images.length === 0) {
           logger.error(
@@ -141,7 +111,7 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
         }
 
         const outDir = getOutputDir();
-        const ts = Date.now();
+        const ts = outputStamp();
         const saved: string[] = [];
         for (let i = 0; i < images.length; i++) {
           const img = images[i];
@@ -159,8 +129,9 @@ export function registerGeminiImageToImageCommand(parent: Command): void {
           logger.success(`Copied to: ${opts.output}`);
         }
 
-        console.log(`\nGenerated ${saved.length} image(s):`);
-        for (const f of saved) console.log(`  ${f}`);
+        const finalImages = finalizeGeneratedImages(saved, { ...opts, logger });
+        console.log(`\nGenerated ${finalImages.length} image(s):`);
+        for (const f of finalImages) console.log(`  ${f}`);
       },
     );
 }

@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
+import { fetchWithValidatedRedirects } from "../../../core/http-client.js";
 import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
@@ -34,7 +35,10 @@ export async function downloadOpenRouterVideo(opts: OpenRouterDownloadOpts): Pro
   const apiKey = requireOpenRouterKey();
   const url = videoContentUrl(jobId);
   const dest = path.join(getOutputDir(), `openrouter_video_${jobId}.mp4`);
-  const r = await globalThis.fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+  // The key header is dropped if the API redirects to storage on another origin.
+  const { response: r } = await fetchWithValidatedRedirects(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
   if (!r.ok) {
     logger.error(`Download HTTP ${r.status}`);
     process.exit(1);
@@ -64,7 +68,7 @@ export async function downloadOpenRouterVideo(opts: OpenRouterDownloadOpts): Pro
 export function registerOpenRouterVideoStatusCommand(parent: Command): void {
   parent
     .command("video-status <jobId>")
-    .description("Poll an OpenRouter video generation job")
+    .description("Poll or download an OpenRouter video generation job by job ID")
     .option("--wait", "Poll until status is 'completed' or 'failed'")
     .option("--wait-timeout <ms>", "Poll timeout in ms (with --wait)", "600000")
     .option("--download", "If completed, download the video (implies --wait)")
