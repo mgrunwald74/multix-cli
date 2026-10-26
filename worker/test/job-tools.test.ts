@@ -434,7 +434,7 @@ describe("CLI runner tools", () => {
       { jobs },
     );
     expect(unknown.isError).toBe(true);
-    expect(unknown.content[0].text).toMatch(/^Refusing to run: cost of gemini .* is unknown/);
+    expect(unknown.content[0].text).toMatch(/^Refusing to run: cost of gemini( \S+)? is unknown/);
     const unproven = await callTool(
       env,
       "multix_run",

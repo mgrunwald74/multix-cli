@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkBudget, estimateCommand, pricedCommands } from "../../../src/budget/command-cost.js";
+import { SPEECH_ADAPTERS } from "../../../src/commands/speech/speech-adapters.js";
 import { BudgetError } from "../../../src/core/errors.js";
 
 const AT = new Date("2026-10-26T12:00:00Z");
@@ -117,5 +118,29 @@ describe("speech generate estimates", () => {
     const fromFlag = speech({ "--provider": "elevenlabs", "--text": TEXT });
     expect(fromFile).toMatchObject({ status: "estimated", text: { characters: 17 } });
     expect(fromFlag.high_usd).toBe(fromFile.high_usd);
+  });
+
+  it("prices the default model each priced provider's adapter runs", () => {
+    for (const provider of ["gemini", "elevenlabs"] as const) {
+      expect(speech({ provider, text: TEXT }).model).toBe(SPEECH_ADAPTERS[provider].defaultModel());
+    }
+  });
+
+  it("a fallback plan's range spans its routes and expects the primary route's cost", () => {
+    const flash = speech({ provider: "elevenlabs", model: "eleven_flash_v2_5", text: TEXT });
+    const plan = speech({
+      provider: "elevenlabs",
+      model: "eleven_flash_v2_5",
+      fallback: ["elevenlabs:eleven_v3"],
+      text: TEXT,
+    });
+    expect(plan.low_usd).toBe(flash.low_usd);
+    expect(plan.expected_usd).toBe(flash.expected_usd);
+    expect(plan.high_usd ?? 0).toBeGreaterThan(flash.high_usd ?? 0);
+  });
+
+  it("names no empty model in the refusal of an unresolvable route", () => {
+    const unknown = speech({ text: TEXT });
+    expect(() => checkBudget(unknown, 1, "strict")).toThrow(/cost of speech is unknown/);
   });
 });

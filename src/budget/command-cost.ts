@@ -234,8 +234,12 @@ function estimateSpeech(o: Options, d: CommandDefaults): CostEstimate {
   const top = estimates.reduce((a, b) => ((b.high_usd ?? 0) > (a.high_usd ?? 0) ? b : a));
   if (estimates.length === 1) return top;
   const proven = estimates.every((e) => e.upper_bound === "proven");
+  const lows = estimates.map((e) => e.low_usd ?? 0);
   return {
     ...top,
+    // The range spans every route; the expected cost is the primary route's, which runs when its key is set.
+    low_usd: Math.min(...lows),
+    expected_usd: estimates[0]?.expected_usd ?? top.expected_usd,
     upper_bound: proven ? "proven" : "estimated",
     assumptions: [
       ...top.assumptions,
@@ -306,7 +310,7 @@ export function checkBudget(estimate: CostEstimate, maxCost: number, policy: Cos
     n === 0 ? "$0" : `$${n < 0.01 ? Number(n.toPrecision(3)).toString() : n.toFixed(4)}`;
   if (estimate.status !== "estimated" || estimate.high_usd === null) {
     throw new BudgetError(
-      `Refusing to run: cost of ${estimate.provider} ${estimate.model} is unknown (${estimate.reason}: ${estimate.detail}), so --max-cost ${usd(maxCost)} cannot be guaranteed.`,
+      `Refusing to run: cost of ${[estimate.provider, estimate.model].filter(Boolean).join(" ")} is unknown (${estimate.reason}: ${estimate.detail}), so --max-cost ${usd(maxCost)} cannot be guaranteed.`,
       "BUDGET_UNPROVEN",
     );
   }

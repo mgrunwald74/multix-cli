@@ -43,10 +43,16 @@ function localAudioSeconds(input: unknown): number | undefined {
 
 /** The text `speech generate --text-file` will speak; unreadable or oversized files stay unpriced. */
 function textFileContent(path: unknown): string | undefined {
-  if (typeof path !== "string" || !fs.existsSync(path)) return undefined;
-  const stat = fs.statSync(path);
-  if (!stat.isFile() || stat.size > MAX_SPEECH_TEXT_FILE_BYTES) return undefined;
-  return fs.readFileSync(path, "utf8");
+  if (typeof path !== "string") return undefined;
+  try {
+    const stat = fs.statSync(path);
+    if (!stat.isFile() || stat.size > MAX_SPEECH_TEXT_FILE_BYTES) return undefined;
+    const text = fs.readFileSync(path, "utf8");
+    run.textFile = { path, text };
+    return text;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Defaults a command resolves at run time (env overrides, file probes), not in commander. */

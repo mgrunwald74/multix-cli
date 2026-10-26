@@ -50,6 +50,11 @@ export interface RunState {
   estimate?: CostEstimate;
   maxCost?: number;
   costPolicy?: CostPolicy;
+  /**
+   * `--text-file` as read by the pre-flight estimate; the command speaks this
+   * same text so a file changed in between cannot exceed a proven ceiling.
+   */
+  textFile?: { path: string; text: string };
   /** Outcome of the --max-cost check. */
   budget?: {
     ok: boolean;

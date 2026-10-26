@@ -274,6 +274,36 @@ describe("budget guards (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
     expect(envelope(over.stdout).error.code).toBe("BUDGET_EXCEEDED");
   });
 
+  it("speech generate prices the env default Gemini model, as primary and as fallback", async () => {
+    const pro = { GEMINI_TTS_MODEL: "gemini-2.5-pro-preview-tts" };
+    const primary = await run(
+      ["speech", "generate", "--provider", "gemini", "--text", VI, "--estimate", "--json"],
+      pro,
+    );
+    expect(envelope(primary.stdout).estimate).toMatchObject({
+      status: "estimated",
+      model: "gemini-2.5-pro-preview-tts",
+    });
+    const fallback = await run(
+      [
+        "speech",
+        "generate",
+        "--provider",
+        "elevenlabs",
+        "--fallback",
+        "gemini",
+        "--text",
+        VI,
+        "--estimate",
+        "--json",
+      ],
+      pro,
+    );
+    expect(envelope(fallback.stdout).estimate.assumptions.join(" ")).toContain(
+      "gemini/gemini-2.5-pro-preview-tts",
+    );
+  });
+
   it("speech generate with an unpriced --fallback route fails closed", async () => {
     const result = await run(
       [
