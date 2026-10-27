@@ -250,6 +250,7 @@ export function classifyError(error: unknown): ErrorInfo {
     if (error.code === "VALIDATION_ERROR") {
       return build(codeFromText(message) === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_INPUT", message);
     }
+    if (error.code === "BINARY_MISSING") return build("BINARY_MISSING", message);
     if (error.code === "POLL_TIMEOUT") return build("TIMEOUT", message);
     if (error.code === "UNKNOWN_REMOTE_STATE") return build("UNKNOWN_REMOTE_STATE", message);
     if (error instanceof BudgetError) return build(error.code as ErrorCode, message);
