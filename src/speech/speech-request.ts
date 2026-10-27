@@ -9,9 +9,11 @@
 
 import { ValidationError } from "../core/errors.js";
 import { ELEVENLABS_RECOMMENDED_VOICES } from "../providers/elevenlabs/models.js";
+import { findSpeechModel as findFalSpeechModel } from "../providers/fal/speech-models.js";
 import { FISH_PUBLIC_VOICES } from "../providers/fish/models.js";
 import { GEMINI_TTS_VOICES, isVoiceAllowedForModel } from "../providers/gemini/voices.js";
 import { OPENAI_TTS_VOICES } from "../providers/openai/models.js";
+import { OPENROUTER_MAX_SPEED } from "../providers/openrouter/speech-defaults.js";
 import {
   SPEECH_FORMATS,
   SPEECH_PROVIDERS,
@@ -199,6 +201,13 @@ export function voiceProblem(
         return `"${voice}" is not a Fish Audio voice id${elsewhere()}. Fish voice ids look like ${FISH_PUBLIC_VOICES.adrian}; list yours with: multix fish voices list`;
       }
       return undefined;
+    case "fal": {
+      // Gemini endpoints take a closed list of names; ElevenLabs ones take any voice name or id.
+      const voices = findFalSpeechModel(model)?.voices;
+      return !voices || voices.some((v) => v.toLowerCase() === voice.toLowerCase())
+        ? undefined
+        : `"${voice}" is not a voice of fal ${model}${elsewhere()}. Valid: ${voices.join(", ")}`;
+    }
     case "minimax":
       return elsewhere() !== ""
         ? `"${voice}" is not a MiniMax voice id${elsewhere()}. MiniMax voice ids look like English_expressive_narrator`
@@ -209,11 +218,15 @@ export function voiceProblem(
 }
 
 /** ElevenLabs accepts the recommended voice names as a shorthand for their ids. */
-function canonicalVoice(provider: SpeechProvider, voice: string): string {
+function canonicalVoice(provider: SpeechProvider, model: string, voice: string): string {
   if (provider === "elevenlabs" && Object.hasOwn(ELEVENLABS_RECOMMENDED_VOICES, voice)) {
     return ELEVENLABS_RECOMMENDED_VOICES[voice as keyof typeof ELEVENLABS_RECOMMENDED_VOICES];
   }
   if (provider === "fish") return FISH_PUBLIC_VOICES[voice.toLowerCase()] ?? voice;
+  if (provider === "fal") {
+    const voices = findFalSpeechModel(model)?.voices;
+    return voices?.find((v) => v.toLowerCase() === voice.toLowerCase()) ?? voice;
+  }
   return voice;
 }
 
@@ -297,7 +310,7 @@ export function buildRoute(
   // Atlas has no default voice: its models pick one when none is sent.
   const voice = multi
     ? undefined
-    : canonicalVoice(provider, requested ?? capability.default_voice ?? info.default_voice);
+    : canonicalVoice(provider, model, requested ?? capability.default_voice ?? info.default_voice);
   for (const v of multi ? input.speakers.map((s) => s.voice) : voice ? [voice] : []) {
     const problem = voiceProblem(provider, model, v);
     if (problem) problems.push(problem);
@@ -306,6 +319,15 @@ export function buildRoute(
     problems.push(
       `${label} does not list language "${input.language}" (documented: ${capability.languages.join(", ") || "none"})`,
     );
+  }
+  // The gateways name no language list and send none to a model without a language field,
+  // so the flag would be dropped without a word.
+  if (
+    input.language &&
+    (provider === "openrouter" || provider === "fal") &&
+    !capability.language_param
+  ) {
+    problems.push(`${label} takes no language parameter; drop --language`);
   }
   if (input.style && !capability.style) {
     problems.push(
@@ -335,6 +357,16 @@ export function buildRoute(
     extras = extrasFor(provider, input.extras);
   } catch (error) {
     problems.push((error as Error).message);
+  }
+  const speed = extras.speed;
+  if (
+    provider === "openrouter" &&
+    typeof speed === "number" &&
+    (speed <= 0 || speed > OPENROUTER_MAX_SPEED)
+  ) {
+    problems.push(
+      `--extra openrouter.speed must be greater than 0 and at most ${OPENROUTER_MAX_SPEED} (got ${speed})`,
+    );
   }
   if (problems.length > 0) throw new ValidationError(problems.join("; "));
   return {
