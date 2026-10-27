@@ -39,6 +39,8 @@ export interface RunState {
   externalRuns: string[];
   /** Model named by the first provider request that names one. */
   requestModel?: string;
+  /** Structured result a command reports for the envelope's `data` (wins over parsed stdout). */
+  data?: unknown;
   /** stdout/stderr text captured in JSON mode. */
   stdout: string[];
   stderr: string[];
@@ -48,6 +50,12 @@ export interface RunState {
   estimate?: CostEstimate;
   maxCost?: number;
   costPolicy?: CostPolicy;
+  /**
+   * `--text-file` (or `fish tts --turns-file`) as read by the pre-flight
+   * estimate, without a leading BOM; the command speaks this same text so a
+   * file changed in between cannot exceed a proven ceiling.
+   */
+  textFile?: { path: string; text: string };
   /** Outcome of the --max-cost check. */
   budget?: {
     ok: boolean;

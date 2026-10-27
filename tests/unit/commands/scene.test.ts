@@ -483,6 +483,7 @@ describe("scene scripts", () => {
     ]);
     const long = `[${"x".repeat(30)}]`;
     expect(partErrors(`ok then. ${long}`, chunkText(`ok then. ${long}`, 20), 20)).toEqual([
+      expect.stringContaining("part 2: has no spoken text"),
       expect.stringContaining("part 2: 32 characters, over the limit of 20"),
     ]);
     expect(
@@ -490,11 +491,90 @@ describe("scene scripts", () => {
     ).toContainEqual(expect.stringContaining("would change its tags"));
   });
 
-  it("keeps a v3 audio tag whole when a line is split in the plan", () => {
-    writeProfile(tmp, { ...MAI, model: "eleven_v3", settings: {}, max_chars: 30 });
+  it("never splits a tag from the words next to it", () => {
+    // A tag at the end goes with the word before it; elsewhere, with the word after it.
+    expect(chunkText("aaaa bbbb cccc dd [sighs]", 18)).toEqual(["aaaa bbbb cccc", "dd [sighs]"]);
+    expect(chunkText("aaaa bbbb [sighs] dddddddd", 18)).toEqual(["aaaa bbbb", "[sighs] dddddddd"]);
+    expect(chunkText("aaaa bbbb [sighs] [laughs] dd", 22)).toEqual([
+      "aaaa bbbb",
+      "[sighs] [laughs] dd",
+    ]);
+    expect(chunkText('Hello there my friend. <break time="1s"/>', 30)).toEqual([
+      "Hello there my",
+      'friend. <break time="1s"/>',
+    ]);
+    expect(chunkText("Hello there my friend. [laughs] Yes.", 30)).toEqual([
+      "Hello there my friend.",
+      "[laughs] Yes.",
+    ]);
+    // A tag and its word over the limit together are the only way to isolate a tag.
+    const parts = chunkText("[sighs heavily and slowly] Fine.", 30);
+    expect(parts).toEqual(["[sighs heavily and slowly]", "Fine."]);
+    expect(partErrors("[sighs heavily and slowly] Fine.", parts, 30)).toEqual([
+      expect.stringContaining("part 1: has no spoken text"),
+    ]);
+    expect(partErrors("[laughs]", ["[laughs]"], 30)).toEqual([]);
+    // When the tag fits with the part before it, it goes there instead.
+    expect(chunkText("ab. [sighs heavily and slowly] Fine.", 30)).toEqual([
+      "ab. [sighs heavily and slowly]",
+      "Fine.",
+    ]);
+  });
+
+  it("keeps tags and punctuation with spoken text in unspaced CJK lines", () => {
+    const jp = "[sighs]今日はとても疲れたので早く帰りたいと思います。";
+    expect(chunkText(jp, 20)).toEqual([
+      "[sighs]今日はとても疲れたので早く",
+      "帰りたいと思います。",
+    ]);
+    expect(partErrors(jp, chunkText(jp, 20), 20)).toEqual([]);
+    const stop = "今日はとても疲れたので早く帰りたいと思い。";
+    expect(chunkText(stop, 20)).toEqual(["今日はとても疲れたので早く帰りたいと思", "い。"]);
+    expect(partErrors(stop, chunkText(stop, 20), 20)).toEqual([]);
+    for (const [line, max, parts] of [
+      [
+        "[sighs]今日はとても疲れたので早く帰りたい。",
+        20,
+        ["[sighs]今日はとても疲れたので早く", "帰りたい。"],
+      ],
+      ["[whispering softly]嘘。本当だよ。", 20, ["[whispering softly]嘘", "。本当だよ。"]],
+      ["Tu es vraiment sûrs ?", 20, ["Tu es vraiment", "sûrs ?"]],
+      ["I was going to say ...", 20, ["I was going to", "say ..."]],
+      [
+        "Tu es vraiment sûr ? [soupire profondément] Absolument pas.",
+        30,
+        ["Tu es vraiment", "sûr ? [soupire profondément]", "Absolument pas."],
+      ],
+      [
+        "Tu es là ? [soupire longuement] D'accord, très bien.",
+        25,
+        ["Tu es", "là ? [soupire longuement]", "D'accord, très bien."],
+      ],
+    ] as const) {
+      expect(chunkText(line, max)).toEqual(parts);
+      expect(partErrors(line, [...parts], max)).toEqual([]);
+    }
+    // Moving words into a part of only tags never cuts inside a tag.
+    const line = 'we — [sighs] [whispering softly]go[whispering softly] sûrs ?<break time="1s"/>';
+    for (const max of [20, 30, 43])
+      expect(partErrors(line, chunkText(line, max), max)).not.toContainEqual(
+        expect.stringContaining("unclosed"),
+      );
+    const glued = `x [laughs]${"y".repeat(30)}`;
+    expect(chunkText(glued, 20)[0]).toBe(`x [laughs]${"y".repeat(10)}`);
+  });
+
+  it("keeps a v3 audio tag with its sentence when a line is split in the plan", () => {
+    writeProfile(tmp, { ...MAI, model: "eleven_v3", settings: {}, max_chars: 40 });
     writeScripts({ "s03.txt": "MAI: [sighs heavily and slowly] Fine. We will go at 3.5 past.\n" });
     const texts = plan().manifest.scenes[2]?.lines.map((l) => l.text);
-    expect(texts).toEqual(["[sighs heavily and slowly]", "Fine. We will go at 3.5 past."]);
+    expect(texts).toEqual(["[sighs heavily and slowly] Fine.", "We will go at 3.5 past."]);
+  });
+
+  it("rejects a split that would send a tag with no spoken text", () => {
+    writeProfile(tmp, { ...MAI, model: "eleven_v3", settings: {}, max_chars: 30 });
+    writeScripts({ "s03.txt": "MAI: [sighs heavily and slowly] Fine. We will go at 3.5 past.\n" });
+    expect(() => plan()).toThrow(/part 1: has no spoken text/);
   });
 
   it("splits an over-long line into numbered parts in the manifest", () => {

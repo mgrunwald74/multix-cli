@@ -17,6 +17,7 @@ import {
   SCENE_ID,
   charCount,
   chunkText,
+  hasSpokenText,
   markupIn,
   parseScript,
   unclosedMarkup,
@@ -261,8 +262,8 @@ export function lineErrors(
 
 /**
  * Problems with the parts a line was split into: each part is sent as its own
- * request, so each must carry only whole tags (the same tags the line was
- * validated with) and fit the limit.
+ * request, so each must carry spoken text and only whole tags (the same tags
+ * the line was validated with) and fit the limit.
  */
 export function partErrors(text: string, parts: string[], limit: number): string[] {
   const errors: string[] = [];
@@ -270,16 +271,23 @@ export function partErrors(text: string, parts: string[], limit: number): string
   parts.forEach((part, i) => {
     const open = unclosedMarkup(part);
     if (open.length) errors.push(`${label(i)}unclosed tag ${open.join(" ")} would be read aloud`);
+    if (parts.length > 1 && !hasSpokenText(part)) {
+      errors.push(
+        `${label(i)}has no spoken text, only tags or punctuation; shorten the line or raise max_chars`,
+      );
+    }
     const n = charCount(part);
     if (n > limit) {
       errors.push(`${label(i)}${n} characters, over the limit of ${limit} (a tag cannot be split)`);
     }
   });
+  // Compared as sorted lists: markupIn lists SSML before audio tags, so their
+  // order depends on where the line is split.
   const tags = (s: string) => {
     const m = markupIn(s);
-    return [...m.ssml, ...m.audioTags].join("\n");
+    return [...m.ssml, ...m.audioTags];
   };
-  if (parts.map(tags).filter(Boolean).join("\n") !== tags(text)) {
+  if (parts.flatMap(tags).sort().join("\n") !== tags(text).sort().join("\n")) {
     errors.push("splitting the line would change its tags; shorten it or raise max_chars");
   }
   return errors;

@@ -46,7 +46,8 @@ https://multix.zuey.me/llms.txt
 2. **Validate for free.** Add `--dry-run` to any command: local checks run
    (flags, input files, keys), then the first provider request is shown
    (method, URL without query string, body with long values shortened, header
-   names only) instead of being sent. Local `media` commands stop before
+   names only, except the value of Fish Audio's `model` header) instead of
+   being sent. Local `media` commands stop before
    running. Add `--estimate` to price the run, and `--max-cost <usd>` to cap
    it; see [Cost](#cost-estimate-spend-guard-and-receipt).
 3. **Run with `--json`** (or `MULTIX_OUTPUT=json`). stdout is exactly one line,
@@ -88,11 +89,11 @@ https://multix.zuey.me/llms.txt
 | `outputs[]` | Files the run wrote: relative path, size, MIME type sniffed from the content, SHA-256, image `width`/`height`, media `duration_s` (with ffprobe). |
 | `warnings[]` | Problems found in the outputs, such as an empty file or content that does not match its extension. |
 | `data` / `text` | The command's stdout: parsed JSON, or text capped at 32 KB. |
-| `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). |
+| `error` | `code`, `message`, `retryable`, `retry_after_s`, `hint`, `http_status`, `env` (the key name when one is missing). URL query strings in `message` and `log` are redacted, including a pre-signed input URL a provider echoes back in its error. |
 | `usage` | What the provider reported: `tokens` (`input`, `output`, `total`, `thinking`), `cost_usd`, `credits`, and other numeric `metrics` by key path. `sources.cost_usd` / `sources.credits` name where each number came from (for example `api.elevenlabs.io header.character-cost`). Nothing is estimated: a provider's own estimate or quote (such as Runway `estimatedCost`) stays in `metrics` and is never reported as `cost_usd` or `credits`. `cost_usd` and `credits` are what the run spent: an account balance (Leonardo `apiCredit` from `leonardo me`, HeyGen remaining or included credits from `heygen me`) is never reported as `credits` or `cost_usd`. |
 | `http` | Provider request count, failed requests and total time. |
 | `provider_ids` | Request, job or prediction ids the provider returned. |
-| `request` | With `--dry-run`: the request that would have been sent. Header values, secret-named fields and URL query strings (pre-signed URLs) are redacted. |
+| `request` | With `--dry-run`: the request that would have been sent. Header values, secret-named fields and URL query strings (pre-signed URLs) are redacted; the one header value shown is Fish Audio's `model` (in `header_values`), because it chooses what runs and is billed and holds no secret. |
 | `estimate` | Pre-flight price of the run (with `--estimate`, `--max-cost`, or on a priced command). `estimate_only: true` marks an `--estimate` run. |
 | `budget` | With `--max-cost`: `ok`, `max_cost_usd`, `policy`, and the refusal `code` and `message`. |
 | `cost` | The run's cost receipt (`multix.cost/v1`); see [Cost receipt](#cost-receipt). |
@@ -146,6 +147,11 @@ Estimate: $0.00136 expected, $0.00136–$0.00136 range (proven ceiling)
 | --- | --- | --- |
 | `gemini generate-speech` | Text tokens in, audio tokens out (25 tokens per second of audio) | Estimated: the model decides the audio length, so `--max-cost` needs `--cost-policy estimate`. |
 | `elevenlabs tts` | Characters (Unicode code points as sent) | Proven. `--previous-text` and `--next-text` count only in the high end. |
+| `openrouter tts` | The model's OpenRouter price: characters for most models, UTF-8 bytes for Fish Audio, tokens for Gemini TTS, seconds of output audio for Seed Audio | Proven for character and byte prices (`--instructions` counts only in the high end); estimated for token and output-second prices. Text must come from `--text`. |
+| `fish tts` | UTF-8 bytes of the text as sent, tags included; text from `--text`, or from the CLI a readable `--text-file` or `--turns-file` (the tagged text multix builds) | Proven. Over MCP, file text is not priced. |
+| `fish voice-design` | A flat $0.01 per successful request, whatever the prompt or `--count`; the receipt counts the request | Proven. |
+| `openrouter transcribe` | Seconds of input audio, measured with `ffprobe` from the local `--input` file | Proven. The high end adds 5% to the measured length and rounds up to a whole minute. A URL input, a file `ffprobe` cannot read, or a token-priced model is `unknown`. |
+| `speech generate` | Each route's price, as `gemini generate-speech`, `elevenlabs tts` or `fish tts` would bill it; text from `--text` or `--text-file` | As for that provider. `--style` counts in the high end on Gemini; `--extra elevenlabs.previous_text`/`next_text` count in the high end on ElevenLabs. A `--fallback` plan is priced at its most expensive route and is proven only if every route is. A route on another provider (OpenAI, MiniMax, Atlas) or an ElevenLabs model without a listed price (`eleven_v3_conversational`) makes the whole run `unknown`. Over MCP, `text-file` is not priced. |
 
 Any other command or model has estimate status `unknown`, never $0, and
 `--max-cost` refuses it.
@@ -157,7 +163,8 @@ Prices live in a versioned catalog (`multix.pricing/v1`,
 USD per unit, dated price windows (promotions and scheduled changes), billing
 tier, `last_checked`, source URL and a verified flag. A price that is missing,
 unverified, or last checked more than 120 days ago resolves to `unknown`.
-Within 24 hours of a price change the high end uses the higher price.
+Within 24 hours of a price change the high end uses the higher price; a price
+that ends within 24 hours with no known next price is `unknown`.
 
 Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
 
@@ -171,12 +178,31 @@ Prices as checked on 2026-10-26 (`--estimate` shows the rate in force):
 | `elevenlabs/multilingual@api` | `eleven_v4`, `eleven_v3`, `eleven_multilingual_v2` | $0.08 / 1K characters |
 | `elevenlabs/flash-turbo@api` | `eleven_v4_turbo`, `eleven_flash_v2_5`, `eleven_flash_v2`, `eleven_turbo_v2_5`, `eleven_turbo_v2` | $0.04 / 1K characters |
 | `fish/s2-pro@api` | `s2.1-pro`, `s2-pro` | $15 / 1M UTF-8 bytes |
+| `fish/s2.1-pro-free@api` | `s2.1-pro-free` | $0 (the free model's limits are not modelled) |
 | `fish/s1@api` | `s1` | $15 / 1M UTF-8 bytes |
 | `fish/drama-3@api` | `drama-3` | $10 / 1M UTF-8 bytes (promotion until 2026-11-12T17:00Z), then $50 |
 
+OpenRouter speech and transcription prices are copied from OpenRouter's public
+models catalog (`/api/v1/models?output_modalities=speech` and
+`?output_modalities=transcription`, the same lists `multix openrouter
+speech-models` and `multix openrouter transcription-models` print), with rate
+ids `openrouter/<name>@api` and the model ids and canonical slugs OpenRouter
+lists. That list shows each model's cheapest endpoint, but OpenRouter can route
+a request to any of them, so each price is the highest among the model's
+endpoints (`/api/v1/models/<id>/endpoints`); for example
+`openai/whisper-large-v3-turbo` is priced at $0.0000111/s, not $0.00000333/s.
+Character prices count emoji and other astral characters twice in the high end. Transcription models priced per token (`google/gemini-3.5-transcribe`,
+`openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe`) and the MAI
+Transcribe models, whose price unit is not stated, stay `unknown`. The OpenRouter
+prices of Fish Audio Drama 3 and Gemini 3.8 TTS end with their direct-API price
+changes (2026-11-12 and 2027-01-01) and become `unknown` until re-checked.
+
 Gemini prices are the paid Standard tier; the free tier costs nothing.
-ElevenLabs subscription plans spend credits instead of USD. The Fish Audio
-prices are kept for the upcoming Fish provider; no command uses them yet.
+ElevenLabs subscription plans spend credits instead of USD. The `fish/*` rates
+price the native Fish Audio API (`fish tts`, `speech generate --provider fish`,
+`fish voice-design`);
+OpenRouter's `fish-audio/*` models have their own `openrouter/*` rates, and
+multix never falls back between the two routes.
 
 ### Cost receipt
 
@@ -242,6 +268,7 @@ or `~/.multix/.env` only, not a project `.env`).
 | Need | Start with |
 | --- | --- |
 | Analyze or transcribe files | [Gemini](/commands/gemini/) |
+| Speech from any TTS provider: compare models by language, one request shape | [Speech](/commands/speech/) |
 | Generate or edit images, speech, or transcription | [OpenAI](/commands/openai/) |
 | MiniMax image, video, speech, or music | [MiniMax](/commands/minimax/) |
 | Routed image, image-to-video, speech, or transcription | [OpenRouter](/commands/openrouter/) |
@@ -249,6 +276,7 @@ or `~/.multix/.env` only, not a project `.env`).
 | Seedream, Seedance, reference video, or 3D | [BytePlus](/commands/byteplus/) |
 | Workers AI image/speech or AI Gateway video | [Cloudflare](/commands/cloudflare/) |
 | Voice workflows, dubbing, or generated audio | [ElevenLabs](/commands/elevenlabs/) |
+| Native Fish Audio speech: Drama 3, multi-speaker turns, pronunciation dictionaries | [Fish Audio](/commands/fish/) |
 | Any fal.ai queue model, image, or video | [fal.ai](/commands/fal/) |
 | Any Atlas Cloud model, or a resumable async image/video/audio/3D job | [Atlas Cloud](/commands/atlascloud/) |
 | Any Replicate model, image, or video; resume/cancel by prediction ID | [Replicate](/commands/replicate/) |

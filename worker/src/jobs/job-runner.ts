@@ -73,10 +73,10 @@ export async function outputKeyPrefix(
   return `${directory}/${(await sha256Hex(userId)).slice(0, 16)}/${jobId}`;
 }
 
-/** Only the keys the command's provider reads. */
-export function jobEnv(group: string, keys: ProviderKeys): Record<string, string> {
+/** Only the keys the command's providers read. */
+export function jobEnv(groups: readonly string[], keys: ProviderKeys): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const name of GROUP_KEYS[group] ?? []) {
+  for (const name of groups.flatMap((group) => GROUP_KEYS[group] ?? [])) {
     const value = keys[name]?.trim();
     if (value) env[name] = value;
   }
@@ -136,7 +136,7 @@ export class JobRunner {
     const spec: JobSpec = {
       jobId,
       argv: prepared.argv,
-      env: jobEnv(prepared.group, this.ctx.keys),
+      env: jobEnv(prepared.keyGroups, this.ctx.keys),
       inputs: prepared.inputs,
       timeoutMs: JOB_TIMEOUT_MS,
     };

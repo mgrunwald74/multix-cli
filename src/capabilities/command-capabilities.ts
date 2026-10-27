@@ -77,6 +77,9 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "cloudflare generate-speech": fixed(["speech"], ["audio"]),
   "cloudflare generate-video": fixed(["video"], ["video"]),
   "elevenlabs tts": fixed(["speech"], ["audio"]),
+  "fish tts": fixed(["speech"], ["audio"]),
+  "fish voice-design": fixed(["voice"], ["audio"]),
+  "fish clone": fixed(["voice"], ["text"]),
   "elevenlabs voices design": fixed(["voice"], ["audio"]),
   "elevenlabs clone": fixed(["voice"], ["text"]),
   "elevenlabs voice-changer": fixed(["voice"], ["audio"]),
@@ -134,6 +137,9 @@ export const COMMAND_CAPABILITIES: Readonly<Record<string, CommandCapability>> =
   "heygen tts": fixed(["speech"], ["audio"]),
   "heygen run": fixed(["any"], []),
   "doc convert": fixed(["document"], ["text"]),
+  // Routes to the one provider --provider names and checks --model against
+  // that provider's documented TTS models before any request.
+  "speech generate": fixed(["speech"], ["audio"]),
   // Each line uses the model its voice profile names, checked against that
   // provider's own TTS model list (Gemini, OpenAI or ElevenLabs).
   "scene render": fixed(["speech"], ["audio"]),
@@ -164,6 +170,9 @@ export const UTILITY_COMMANDS: ReadonlySet<string> = new Set([
   "byteplus status",
   "cloudflare video-status",
   "elevenlabs voices list",
+  "fish voices list",
+  "fish voices get",
+  "fish voices delete",
   "elevenlabs voices get",
   "elevenlabs voices search",
   "elevenlabs voices create-from-preview",
@@ -189,6 +198,7 @@ export const UTILITY_COMMANDS: ReadonlySet<string> = new Set([
   "heygen styles",
   "heygen languages",
   "heygen me",
+  "speech models",
   "media optimize",
   "media split",
   "media batch",

@@ -6,7 +6,9 @@
  * runtime-neutral (src/budget) and shared with the MCP Worker.
  */
 
+import fs from "node:fs";
 import {
+  type CommandDefaults,
   type CostPolicy,
   checkBudget,
   estimateCommand,
@@ -16,9 +18,16 @@ import {
 } from "../budget/command-cost.js";
 import type { CostEstimate } from "../budget/cost-estimate.js";
 import { type CostReceipt, buildCostReceipt, operationIdFor } from "../budget/cost-receipt.js";
+import { envDefault } from "../core/env-default.js";
 import { BudgetError } from "../core/errors.js";
+import { DEFAULT_FISH_TTS_MODEL, FISH_TTS_MODEL_ENV } from "../providers/fish/models.js";
+import { turnsToSpeakerText } from "../providers/fish/tts-request.js";
 import { getDefaultModel } from "../providers/gemini/models.js";
+import { probeDuration } from "./output-file-inspect.js";
 import { run } from "./run-state.js";
+
+/** Same limit as `speech generate` applies when it reads --text-file. */
+const MAX_SPEECH_TEXT_FILE_BYTES = 1024 * 1024;
 
 export interface BudgetCheck {
   ok: boolean;
@@ -28,9 +37,76 @@ export interface BudgetCheck {
   message?: string;
 }
 
-/** Defaults a command resolves at run time (env overrides), not in commander. */
-function runtimeDefaults(command: string): { model?: string } {
+/** The length of a local audio file; a URL or an unreadable file has none (fail closed). */
+function localAudioSeconds(input: unknown): number | undefined {
+  if (typeof input !== "string" || /^https?:\/\//i.test(input)) return undefined;
+  if (!fs.existsSync(input) || !fs.statSync(input).isFile()) return undefined;
+  return probeDuration(input);
+}
+
+/** The text `speech generate --text-file` will speak; unreadable or oversized files stay unpriced. */
+function textFileContent(path: unknown): string | undefined {
+  if (typeof path !== "string") return undefined;
+  try {
+    const stat = fs.statSync(path);
+    if (!stat.isFile() || stat.size > MAX_SPEECH_TEXT_FILE_BYTES) return undefined;
+    // The command strips a leading BOM before sending, so price (and keep) the text without it.
+    const text = fs.readFileSync(path, "utf8").replace(/^\uFEFF/, "");
+    run.textFile = { path, text };
+    return text;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The tagged text `fish tts --turns-file` will send; an unreadable or invalid file stays unpriced. */
+function fishTurnsText(path: unknown): string | undefined {
+  if (typeof path !== "string") return undefined;
+  try {
+    const stat = fs.statSync(path);
+    if (!stat.isFile() || stat.size > MAX_SPEECH_TEXT_FILE_BYTES) return undefined;
+    const raw = fs.readFileSync(path, "utf8").replace(/^\uFEFF/, "");
+    const turns = JSON.parse(raw) as unknown;
+    if (!Array.isArray(turns)) return undefined;
+    const text = turnsToSpeakerText(turns as Array<{ text: string; voice: string }>).text;
+    // The command sends the turns read here, not a second read of a file that may have changed.
+    run.textFile = { path, text: raw };
+    return text;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Defaults a command resolves at run time (env overrides, file probes), not in commander. */
+function runtimeDefaults(command: string, options: Record<string, unknown>): CommandDefaults {
   if (command === "gemini generate-speech") return { model: getDefaultModel("generate-speech") };
+  if (command === "openrouter transcribe") {
+    const audioSeconds = localAudioSeconds(options.input);
+    return audioSeconds !== undefined ? { audioSeconds } : {};
+  }
+  if (command === "fish tts") {
+    const inline = options.text ?? options.prompt;
+    const text =
+      inline !== undefined
+        ? undefined
+        : options.textFile !== undefined
+          ? textFileContent(options.textFile)
+          : fishTurnsText(options.turnsFile);
+    return {
+      model: envDefault(FISH_TTS_MODEL_ENV, DEFAULT_FISH_TTS_MODEL),
+      ...(text !== undefined ? { text } : {}),
+    };
+  }
+  if (command === "speech generate") {
+    const text = options.text === undefined ? textFileContent(options.textFile) : undefined;
+    return {
+      speechModels: {
+        gemini: getDefaultModel("generate-speech"),
+        fish: envDefault(FISH_TTS_MODEL_ENV, DEFAULT_FISH_TTS_MODEL),
+      },
+      ...(text !== undefined ? { text } : {}),
+    };
+  }
   return {};
 }
 
@@ -46,7 +122,7 @@ export function preflightCost(): boolean {
   const maxCost = hasMax ? parseMaxCost(o.maxCost) : undefined;
   const policy = parseCostPolicy(o.costPolicy);
   if (estimateOnly || hasMax || pricedCommands().includes(run.command)) {
-    run.estimate = estimateCommand(run.command, o, runtimeDefaults(run.command));
+    run.estimate = estimateCommand(run.command, o, runtimeDefaults(run.command, o));
   }
   if (maxCost !== undefined && run.estimate) {
     run.maxCost = maxCost;
@@ -118,9 +194,11 @@ export function formatEstimate(e: CostEstimate, budget?: BudgetCheck): string {
     const counted = Object.entries(e.units)
       .map(([meter, r]) => `${meter} ${r.low === r.high ? r.expected : `${r.low}–${r.high}`}`)
       .join(", ");
-    lines.push(
-      `  text: ${e.text.characters} characters (${e.text.nfc_characters} after NFC), ${e.text.utf8_bytes} UTF-8 bytes`,
-    );
+    if (e.text.characters > 0) {
+      lines.push(
+        `  text: ${e.text.characters} characters (${e.text.nfc_characters} after NFC), ${e.text.utf8_bytes} UTF-8 bytes`,
+      );
+    }
     if (counted) lines.push(`  units: ${counted}`);
     if (e.rate) {
       const window = e.rate.effective_until ? `, until ${e.rate.effective_until}` : "";

@@ -93,6 +93,47 @@ describe("extractUsage", () => {
     expect(usage.metrics.remainingCredits).toBe(992);
   });
 
+  it("reports a spend leaf as credits even when it names a balance", () => {
+    for (const [body, path] of [
+      [{ quota_credits_used: 6 }, "quota_credits_used"],
+      [{ included_credits_used: 6 }, "included_credits_used"],
+      [{ subscription: { credits_used: 6 } }, "subscription.credits_used"],
+      [{ wallet: { creditsSpent: 6 } }, "wallet.creditsSpent"],
+      [{ allowance_credits_consumed: 6 }, "allowance_credits_consumed"],
+      [{ granted_credits_charged: 6 }, "granted_credits_charged"],
+      [{ quotaAPICreditsUsed: 6 }, "quotaAPICreditsUsed"],
+      [{ quotaCreditsUsed30d: 6 }, "quotaCreditsUsed30d"],
+    ] as const) {
+      const usage = extractUsage(body);
+      expect(usage.credits).toBe(6);
+      expect(usage.sources?.credits).toBe(`body.${path}`);
+    }
+  });
+
+  it("matches spend words whole, so unused credits stay a balance", () => {
+    for (const body of [
+      { unused_credits: 40 },
+      { included_unused_credits: 40 },
+      { subscription: { unusedCredits: 40 } },
+      { credits_left: 40 },
+    ]) {
+      expect(extractUsage(body).credits).toBeUndefined();
+    }
+    expect(extractUsage({ quota_credits_used: 2, quota_credits: 40 }).credits).toBe(2);
+  });
+
+  it("prefers a plain spend key over a spend key inside a balance", () => {
+    const usage = extractUsage({ subscription: { credits_used: 1200 }, job: { credits: 5 } });
+    expect(usage.credits).toBe(5);
+    expect(usage.sources?.credits).toBe("body.job.credits");
+    expect(usage.metrics["subscription.credits_used"]).toBe(1200);
+    const cost = extractUsage({ subscription: { usage: { cost: 12.5 } }, usage: { cost: 0.2 } });
+    expect(cost.cost_usd).toBe(0.2);
+    const both = extractUsage({ usage: { cost: 0.2 }, subscription: { credits_used: 7 } });
+    expect(both).toMatchObject({ cost_usd: 0.2, credits: 7 });
+    expect(extractUsage({ APICredits: 900 }).credits).toBeUndefined();
+  });
+
   it("matches balance parents by whole segment, not substring", () => {
     expect(extractUsage({ subscription_job: { credits: 4 } }).credits).toBe(4);
     expect(extractUsage({ job: { apiCreditCost: 3 } }).credits).toBe(3);
