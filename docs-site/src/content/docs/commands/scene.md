@@ -191,8 +191,10 @@ the model, voice and format lists come from each provider's model files.
 - Characters are counted as Unicode code points. `--max-chars` (minimum 20)
   splits lines below the model limit. A line is split at sentence ends (`.`,
   `!` or `?` followed by a space, so `3.5` stays whole), then at spaces, and
-  never inside a `<…>` or `[…]` tag. `plan` rejects a part that would carry an
-  unclosed tag or a tag longer than the limit.
+  never inside a `<…>` or `[…]` tag. A tag stays with the word after it, or
+  with the word before it at the end of a sentence, so it is never sent as a
+  request of its own. `plan` rejects a part that would carry an unclosed tag, a
+  tag longer than the limit, or no spoken text (only tags or punctuation).
 - `--language` is stored in every profile, but it is only sent to models in the
   "Language sent" column, as the primary subtag (`vi-VN` is sent as
   `language_code: vi`). `eleven_multilingual_v2` does not enforce a language

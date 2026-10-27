@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ValidationError } from "../../src/core/errors.js";
 import { limitsFrom } from "../src/config.js";
+import { jobEnv } from "../src/jobs/job-runner.js";
 import { type RunRequest, prepareRun } from "../src/jobs/run-argv-builder.js";
 import { safeFileName } from "../src/jobs/run-input-files.js";
 import { normaliseResolution } from "../src/jobs/run-option-caps.js";
+import type { ProviderKeys } from "../src/provider-secret-names.js";
 import { parseWithCli } from "./cli-program.js";
 
 const limits = limitsFrom({});
@@ -165,6 +167,24 @@ describe("prepareRun: argv", () => {
       "--reference-image=in/0-1.png",
       "--reference-image=in/1-2.png",
     ]);
+  }, 120_000);
+
+  it("passes fish tts voices and dictionary references once per value", async () => {
+    const prepared = run({
+      command: "fish tts",
+      options: {
+        text: "<|speaker:0|>Hi.<|speaker:1|>Hello.",
+        voice: ["aaaabbbbccccddddeeeeffff00001111", "2222333344445555666677778888aaaa"],
+        dictionary: ["dict_1@ver_2", "dict_3@ver_4"],
+      },
+    });
+    const parsed = await parseWithCli(prepared.argv, "fish tts");
+    expect(parsed.opts.voice).toEqual([
+      "aaaabbbbccccddddeeeeffff00001111",
+      "2222333344445555666677778888aaaa",
+    ]);
+    expect(parsed.opts.dictionary).toEqual(["dict_1@ver_2", "dict_3@ver_4"]);
+    expect(parsed.opts.text).toBe("<|speaker:0|>Hi.<|speaker:1|>Hello.");
   }, 120_000);
 
   it("runs runway video and image with downloaded inputs, repeated references and capped duration", async () => {
@@ -457,6 +477,134 @@ describe("prepareRun: rejections", () => {
       /video/,
     ],
   ])("rejects %s", (_label, request, message) => rejects(request, message));
+});
+
+describe("prepareRun: speech", () => {
+  const keys: ProviderKeys = {
+    GEMINI_API_KEY: "g-test-key",
+    OPENAI_API_KEY: "sk-test-openai",
+    ELEVENLABS_API_KEY: "el-test-key",
+    MINIMAX_API_KEY: "mm-test-key",
+    ATLASCLOUD_API_KEY: "atlas-test-key",
+    FAL_KEY: "fal-test-key",
+  };
+
+  it("needs a provider for speech generate", () => {
+    rejects(
+      { command: "speech generate", options: { text: "hi" } },
+      /options\.provider is required for "speech generate"/,
+    );
+    rejects(
+      { command: "speech generate", options: { model: "tts-1", text: "hi" } },
+      /options\.provider is required/,
+    );
+  });
+
+  it("gives the job the keys of its provider and fallbacks only", async () => {
+    const prepared = run({
+      command: "speech generate",
+      options: {
+        provider: "gemini",
+        fallback: ["elevenlabs:eleven_v3:alexandra", "minimax"],
+        text: "hi",
+      },
+    });
+    expect(prepared.group).toBe("speech");
+    expect(prepared.keyGroups).toEqual(["gemini", "elevenlabs", "minimax"]);
+    expect(jobEnv(prepared.keyGroups, keys)).toEqual({
+      GEMINI_API_KEY: "g-test-key",
+      ELEVENLABS_API_KEY: "el-test-key",
+      MINIMAX_API_KEY: "mm-test-key",
+    });
+    const parsed = await parseWithCli(prepared.argv, "speech generate");
+    expect(parsed.opts).toMatchObject({
+      provider: "gemini",
+      fallback: ["elevenlabs:eleven_v3:alexandra", "minimax"],
+    });
+  }, 120_000);
+
+  it("gives a provider-only request that provider's key and nothing else", () => {
+    const prepared = run({
+      command: "speech generate",
+      options: { provider: "openai", fallback: ["openai:tts-1"], text: "hi" },
+    });
+    expect(prepared.keyGroups).toEqual(["openai"]);
+    expect(jobEnv(prepared.keyGroups, keys)).toEqual({ OPENAI_API_KEY: "sk-test-openai" });
+  });
+
+  it("rejects a provider or fallback that is not a speech provider", () => {
+    rejects(
+      { command: "speech generate", options: { provider: "fal", text: "hi" } },
+      /--provider must name one of: gemini, openai, elevenlabs, minimax, atlas/,
+    );
+    rejects(
+      { command: "speech generate", options: { provider: "openai,gemini", text: "hi" } },
+      /--provider must name one of/,
+    );
+    rejects(
+      { command: "speech generate", options: { provider: "openai", fallback: ["fal:flux"] } },
+      /--fallback must name one of: gemini, openai, elevenlabs, minimax, atlas/,
+    );
+  });
+
+  it("takes the text file as a downloaded input, never a local path", () => {
+    const prepared = run({
+      command: "speech generate",
+      options: { provider: "openai" },
+      inputs: { "text-file": "https://cdn.example.com/scene.txt" },
+    });
+    expect(prepared.inputs).toEqual([
+      { url: "https://cdn.example.com/scene.txt", path: "in/0-scene.txt" },
+    ]);
+    expect(prepared.argv).toEqual([
+      "speech",
+      "generate",
+      "--provider=openai",
+      "--text-file=in/0-scene.txt",
+    ]);
+    rejects(
+      { command: "speech generate", options: { provider: "openai", "text-file": "/etc/passwd" } },
+      /--text-file is a file: pass its https URL in inputs\.text-file/,
+    );
+    rejects(
+      {
+        command: "speech generate",
+        options: { provider: "openai" },
+        inputs: { "text-file": "http://cdn.example.com/scene.txt" },
+      },
+      /https/,
+    );
+  });
+
+  it("passes repeated --extra values once each and parses them as the CLI does", async () => {
+    const prepared = run({
+      command: "speech generate",
+      options: {
+        provider: "elevenlabs",
+        extra: ["elevenlabs.stability=0.4", "elevenlabs.seed=7"],
+        text: "hi",
+      },
+    });
+    expect(prepared.argv).toEqual(
+      expect.arrayContaining(["--extra=elevenlabs.stability=0.4", "--extra=elevenlabs.seed=7"]),
+    );
+    const parsed = await parseWithCli(prepared.argv, "speech generate");
+    expect(parsed.opts.extra).toEqual({
+      "elevenlabs.stability": "0.4",
+      "elevenlabs.seed": "7",
+    });
+  }, 120_000);
+
+  it("speech models gets no keys and rejects --ready", () => {
+    const prepared = run({ command: "speech models", options: { provider: "openai" } });
+    expect(prepared.keyGroups).toEqual([]);
+    expect(prepared.argv).toEqual(["speech", "models", "--provider=openai"]);
+    expect(jobEnv(prepared.keyGroups, keys)).toEqual({});
+    rejects(
+      { command: "speech models", options: { ready: true } },
+      /--ready is not available on this server/,
+    );
+  });
 });
 
 describe("helpers", () => {
