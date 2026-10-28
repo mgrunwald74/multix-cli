@@ -8,7 +8,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { execa } from "execa";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isolatedEnv } from "./child-env.js";
@@ -16,6 +16,8 @@ import { isolatedEnv } from "./child-env.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../dist/cli.js");
 const SPAWN_TIMEOUT = 15_000;
+// --import takes a URL; a bare Windows path (D:\...) reads as a URL scheme.
+const FAKE_CDN = pathToFileURL(path.resolve(__dirname, "fixtures/fake-atlas-cdn-fetch.mjs")).href;
 
 // Windows cannot deliver POSIX signals to a child process: kill() ends it outright.
 const describeSignals = process.platform === "win32" ? describe.skip : describe;
@@ -313,7 +315,64 @@ describe("agent mode (smoke)", { timeout: SPAWN_TIMEOUT }, () => {
         expect(out.error.hint).toContain("before resubmitting");
         expect(out.error.hint).not.toMatch(/nothing was left behind/i);
         expect(seen.requests.filter((r) => r.startsWith("POST"))).toHaveLength(1);
+        // The unanswered submit counts as sent and cut off: the cost is not settled at $0.
+        expect(out.cost).toMatchObject({ status: "uncertain" });
+        expect(out.http).toMatchObject({ requests: 1, errors: 1 });
       });
+    });
+
+    it("SIGHUP mid-download removes the lock and temp file and exits 129 with the resume command", async () => {
+      const server = http.createServer((req, res) => {
+        req.resume();
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            code: 200,
+            data: {
+              id: "pred_sig02",
+              status: "completed",
+              outputs: ["https://cdn.atlas.example/out.png"],
+            },
+          }),
+        );
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const { port } = server.address() as AddressInfo;
+      const marker = path.join(tmp, "cdn-started");
+      try {
+        const child = execa(
+          "node",
+          ["--import", FAKE_CDN, CLI, "atlas", "status", "pred_sig02", "--download", "--json"],
+          {
+            reject: false,
+            cwd: tmp,
+            extendEnv: false,
+            env: {
+              ...env,
+              ATLASCLOUD_API_KEY: "test-key-not-real",
+              ATLASCLOUD_BASE_URL: `http://127.0.0.1:${port}/api/v1`,
+              FAKE_CDN_MARKER: marker,
+            },
+            timeout: SPAWN_TIMEOUT - 1_000,
+          },
+        );
+        const deadline = Date.now() + SPAWN_TIMEOUT - 3_000;
+        while (!fs.existsSync(marker) && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        // The lock and the temp file exist while the download runs.
+        expect(fs.readdirSync(tmp).filter((n) => n.endsWith(".part")).length).toBeGreaterThan(0);
+        child.kill("SIGHUP");
+        const result = await child;
+        expect(result.exitCode).toBe(129);
+        const out = envelope(result.stdout);
+        expect(out.next[0]).toBe("multix atlas status pred_sig02 --wait --download");
+        expect(out.provider_ids).toContain("pred_sig02");
+        expect(fs.readdirSync(tmp).filter((n) => n.endsWith(".part"))).toEqual([]);
+      } finally {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      }
     });
 
     it.each([

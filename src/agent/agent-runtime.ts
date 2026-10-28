@@ -24,7 +24,12 @@ import {
 import { setExternalRunGuard } from "../core/external-run-guard.js";
 import { redactUrlsInText } from "../core/redact.js";
 import { costReceiptFor, formatEstimate, formatReceipt, preflightCost } from "./cost-preflight.js";
-import { type DryRunRequest, installFetchTelemetry, settleTelemetry } from "./fetch-telemetry.js";
+import {
+  type DryRunRequest,
+  installFetchTelemetry,
+  recordUnfinishedCalls,
+  settleTelemetry,
+} from "./fetch-telemetry.js";
 import { appendHistory, newHistoryId, redactArgv } from "./history-store.js";
 import { type OutputFile, type OutputWarning, inspectOutput } from "./output-file-inspect.js";
 import { installOutputFileTracker, producedFiles } from "./output-file-tracker.js";
@@ -215,6 +220,7 @@ interface FinalizeInput {
 export function finalizeRun(input: FinalizeInput): number {
   if (run.finalized) return input.exitCode;
   run.finalized = true;
+  recordUnfinishedCalls();
   const dryRun = Boolean(input.dryRunRequest || input.dryRunLocal);
   const estimateOnly = Boolean(input.estimateOnly);
   const notSent = dryRun || estimateOnly;
