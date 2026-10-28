@@ -47,6 +47,9 @@ multix doc convert --input report.pdf
 
 # Optimize a video to 100MB
 multix media optimize --input video.mp4 --output out.mp4 --target-size 100
+
+# Check a render offline (no upload, no key) and keep the receipt
+multix media verify out.mp4 --profile motion-graphics --receipt-out out.receipt.json
 ```
 
 ## For AI agents
@@ -81,7 +84,8 @@ its most expensive route) are priced so far; `--max-cost`
 refuses anything it cannot price. With `--json`, exit codes are `2` usage or
 input (including a refused `--max-cost`), `3` key or setup, `4` temporary
 (retry), `5` rejected (quota, safety, model), `6` timed out (job may still run),
-`1` unknown; plain runs keep exit 1 and print the code and hint on
+`129`/`130`/`143` cancelled by a signal (`CANCELLED`, also in plain runs; a
+second signal skips cleanup and prints no result), `1` unknown; plain runs exit 1 (or the command's own status) and print the code and hint on
 stderr. Each run is recorded in `~/.multix/history.jsonl` without keys or signed
 URLs (`MULTIX_HISTORY=0` turns it off). Details:
 [For AI agents](https://multix.zuey.me/reference/for-ai-agents/).
@@ -700,7 +704,7 @@ multix atlas upload ./photo.png
 - Inputs are model-specific. multix reads each model's published schema, maps flags onto that model's field names, and rejects unsupported flags or invalid values before submitting. Use `--no-validate` to skip this check.
 - `--async` prints only the prediction id on stdout and `upload` prints only the URL; progress goes to stderr, so `id=$(multix atlas video "waves" --async)` works.
 - `--ref` takes one value per flag; repeat it for several references. Local `--ref` / `--audio` files are uploaded first: only image, video and audio files, up to 200 MB (`ATLASCLOUD_MAX_UPLOAD_MB`).
-- Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction, or a download where some outputs fail, exits non-zero with the resume command (including your `--output`). Atlas Cloud has no cancel endpoint.
+- Text outputs (transcripts, lyrics) are printed instead of downloaded. A failed prediction, or a download where some outputs fail, exits non-zero with the resume command (including your `--output`). Ctrl-C, SIGTERM or a closed terminal (SIGHUP) while waiting, in a generation command or in `status --wait`, exits 130, 143 or 129 with that resume command (first in `next` with `--json`, the id in `provider_ids`): the prediction keeps running and is billed, so resume it rather than rerunning. A signal while the submit request is in flight cannot tell whether Atlas Cloud accepted it: check your predictions in the Atlas Cloud console before resubmitting. A signal before the submit (while the model schema loads or local `--ref` / `--audio` files upload) is a clean cancel; nothing was submitted. Atlas Cloud has no cancel endpoint.
 - `run --no-validate` skips the schema, so pass `--type` with it.
 
 ### `multix replicate`
@@ -810,14 +814,14 @@ multix heygen me
 
 ### `multix speech`
 
-One text-to-speech interface over Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud and Fish Audio. The provider commands above are unchanged; `speech` adds one set of flags, checks the request against the chosen model's documented capabilities before calling it, and never switches provider on its own.
+One text-to-speech interface over Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, Fish Audio, OpenRouter and fal.ai. The provider commands above are unchanged; `speech` adds one set of flags, checks the request against the chosen model's documented capabilities before calling it, and never switches provider on its own.
 
 ```bash
 # Models with their languages, formats, style/emotion support, speakers, voices, billing and key readiness
 multix speech models [-p <provider>] [-l <iso-639-1>] [--ready] [--json]
 
 # Generate on an explicit provider (model defaults to the provider's TTS default)
-multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas|fish> [--model <id>] (--text <str>|--text-file <path>) \
+multix speech generate --provider <gemini|openai|elevenlabs|minimax|atlas|fish|openrouter|fal> [--model <id>] (--text <str>|--text-file <path>) \
   [--voice <id>] [--speaker <name:voice> ...] [--language <code>] [--style <text>] [--emotion <name>] \
   [--format mp3|wav|pcm|flac|opus|aac] [--output <path>] [--async] \
   [--fallback <route> ...] [--extra <provider.key=value> ...] [-v]
@@ -832,6 +836,8 @@ multix speech generate --provider minimax --language vi --emotion happy --text "
 
 - `--model` without `--provider` works only when exactly one provider serves that model.
 - `--provider fish` (default model `drama-3`, default voice Adrian) sends one voice; use `multix fish tts --turns-file` for multi-speaker dialogue. Fish `--extra` keys: `fish.temperature`, `fish.top_p`, `fish.speed`, `fish.volume`, `fish.chunk_length`, `fish.normalize`, `fish.latency`.
+- `--provider openrouter` sends the `openrouter tts` request (default `google/gemini-3.8-flash-tts`; any id from `multix openrouter speech-models`, checked against OpenRouter's live list before the paid request). `--extra` keys: `openrouter.speed`, `openrouter.zdr`, `openrouter.deny_data_collection`.
+- `--provider fal` submits to the fal queue like `fal tts` (Gemini 3.8 Flash/Flash-Lite TTS, ElevenLabs v4/v4 Turbo); `--async` prints the request id and a `multix fal result` resume command. `google/gemini-3.8-flash-tts` is on both gateways, so it needs `--provider`.
 - `--fallback` is opt-in and used only when the routes before it have no API key, so it is decided before any paid request; a paid request is never sent again elsewhere. Taking a fallback prints a warning with the voice, billing and format differences.
 - `--json` puts a `multix.speech.result/v1` object in `data` (`data.request` records the text as its length and SHA-256); `--dry-run` validates and shows the first request without sending it.
 - Remote MCP: `speech generate` requires `--provider`, and the job gets only the routed providers' keys. Full reference: [Speech commands](https://multix.zuey.me/commands/speech/).
@@ -874,6 +880,31 @@ multix media batch --input-dir <dir> --output-dir <dir> [--quality 85] [--max-wi
 **Defaults:** quality=85, max-width=1920, bitrate=64k, chunk-duration=3600s.
 **Audio:** mono 16 kHz; the codec follows the output extension (`.mp3` → MP3, `.m4a`/`.aac`/`.mp4`/`.mka`/`.mkv`/`.mov` → AAC, `.opus`/`.ogg` → Opus, `.wav`/`.aiff` → PCM, `.flac` → FLAC); other extensions are rejected. Embedded cover art is dropped.
 **Video:** uses libx264 CRF encoding. Image optimization uses ImageMagick (replaces Pillow).
+
+#### Inspect and verify media offline
+
+These commands run locally with `ffmpeg` and `ffprobe` only: no upload, no provider call, no API key (missing ffmpeg stops with `BINARY_MISSING`). Inputs must be local paths; URLs and ffmpeg protocols (`concat:`, `pipe:`) are refused, symlinks are followed and reported.
+
+```bash
+multix media inspect <file> [--decode] [--timeout 1800]        # sha256, magic bytes vs extension, streams, rational fps/timebase, rotation
+multix media profiles                                          # built-in profiles: motion-graphics, camera-footage, thumbnail, audio
+multix media verify <file> --profile <id> | --profile-file <json> \
+  [--expect-duration <s>] [--duration-tolerance <s>] [--expect-aspect 16:9] [--aspect-tolerance 0.01] \
+  [--loudness <LUFS>] [--loudness-tolerance 1] \
+  [--allow-black <start-end>] [--allow-freeze <start-end>] [--allow-silence <start-end>] \
+  [--rule <script>] [--rule-timeout 30] [--cache-dir <dir>] [--receipt-out <file>] [--timeout 1800]
+multix media frames <file> --output-dir <dir> [--count 9] [--sheet] [--sheet-width 320] [--timeout 300]
+multix media check-receipt <receipt> <file>                    # same bytes as the receipt, and the receipt passed
+```
+
+- `verify` prints a `multix.media-verify/v1` receipt bound to the file's sha256 with status `pass`, `fail` or `incomplete` and exits non-zero unless it passes. Each check records its threshold, measured values and findings with `start_s`/`end_s`. Declare intended fades, holds and silences with the repeatable `--allow-*` ranges; they are reported as intentional instead of failing. Loudness is checked only when `--loudness` is given; no platform targets are built in.
+- Truncation: the `decode` check fails a file that decodes shorter than its container declares, and a WAV whose `data` chunk and RIFF header both declare more bytes than the file holds (`measured.declared_data_bytes`/`present_data_bytes`; `media inspect` reports it in `wav_data` and `errors`). Raw streams without a declared length (raw ac3/AAC, mp3 without a Xing header) are sized by ffprobe from the bitrate (`measured.declared_duration_estimated: true`); a cut on a frame boundary in such a stream cannot be detected. A piped or streamed WAV (a size of 0, 0xFFFFFFFF, 0x7FFFF000, 0x7FFF0000, 0x80000000 or 0x7FFFFF00: ffmpeg, SoX, GStreamer and arecord placeholders) declares no length either. For a truncated WAV, `coverage` and `measured.declared_duration_s` use the duration its header declares (the `fact` sample count, or the data size over the byte rate for PCM and float), also in `wav_data.declared_duration_s`; without one they fall back to what ffprobe reports.
+- A timeout, a failed `--rule` or a file that changed during the run gives `incomplete`, never `pass`. Ctrl-C (or SIGTERM, or a closed terminal) stops the run, removes its temp files and exits with 130 (143, 129) without a receipt. Receipts state `model_reviewed: false` and list what was not measured (A/V sync, content correctness).
+- Custom profile JSON: `{id, version, description?, extends?, media?, checks}`; `extends` names a built-in profile and `null` disables a check. A `--rule` script reads `multix.media-rule-input/v1` JSON on stdin and prints `{id, version, status, message?, findings?}`; it runs without a shell, with only `PATH` in its environment, in an empty temp directory.
+- `--cache-dir` reuses passing and failing receipts keyed by source sha256, profile, expectations, rules and ffmpeg version; delete the directory to clear it (also after changing a module a rule imports: only the rule's own file is hashed). Receipts are unsigned records of a local run.
+- `frames` only extracts frames (manifest `frames.json`, `model_reviewed: false`). To have a model look at them, pass them to `multix gemini analyze`.
+- A transcoded or remuxed file has new bytes: run `verify` on the final file, then `check-receipt` before shipping it. `check-receipt` reports the receipt's verify `engine`; a receipt from a different (e.g. older) engine still passes, with a warning (stderr, and `warnings` in `--json`) to rerun `verify` and apply the current checks.
+- Remote MCP: `--rule`, `--cache-dir` and `--receipt-out` are not supported. Full reference: [Media and documents](https://multix.zuey.me/commands/media-and-documents/).
 
 ### `multix doc`
 
