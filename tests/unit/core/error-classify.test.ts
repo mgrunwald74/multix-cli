@@ -3,11 +3,13 @@ import {
   EXIT_CODES,
   classifyError,
   classifyMessage,
+  classifySignalExit,
   codeFromHttp,
 } from "../../../src/core/error-classify.js";
 import {
   ConfigError,
   HttpError,
+  MissingBinaryError,
   ProviderError,
   ValidationError,
 } from "../../../src/core/errors.js";
@@ -92,5 +94,39 @@ describe("classifyError", () => {
     expect(classifyError(new ConfigError("GEMINI_API_KEY is not set")).exit_code).toBe(
       EXIT_CODES.config,
     );
+  });
+
+  it("reports a missing ffmpeg or ffprobe as a binary to install, not bad input", () => {
+    const info = classifyError(
+      new MissingBinaryError("ffprobe not found on PATH — install ffmpeg which bundles ffprobe"),
+    );
+    expect(info.code).toBe("BINARY_MISSING");
+    expect(info.exit_code).toBe(EXIT_CODES.config);
+    // A user's file name that mentions ffmpeg is still bad input, not a missing binary.
+    expect(
+      classifyError(new ValidationError("Profile file not found: ffmpeg-missing.json")).code,
+    ).toBe("INVALID_INPUT");
+  });
+
+  it("reports a signal's exit status as CANCELLED and keeps that status", () => {
+    for (const [status, signal] of [
+      [129, "SIGHUP"],
+      [130, "SIGINT"],
+      [143, "SIGTERM"],
+    ] as const) {
+      expect(classifySignalExit(status)).toMatchObject({
+        code: "CANCELLED",
+        message: `Cancelled by ${signal} (exit ${status})`,
+        retryable: false,
+        hint: "The run was cancelled; nothing was left behind. Rerun the command.",
+        exit_code: status,
+      });
+    }
+    const sent = classifySignalExit(143, true);
+    expect(sent).toMatchObject({ code: "CANCELLED", exit_code: 143 });
+    expect(sent?.hint).toMatch(/pay twice/);
+    for (const status of [0, 1, 2, 6, 128, 131, 137]) {
+      expect(classifySignalExit(status)).toBeUndefined();
+    }
   });
 });
