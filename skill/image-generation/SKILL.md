@@ -1,6 +1,6 @@
 ---
 name: image-generation
-description: Generate images from a text prompt and edit existing images (image-to-image, i2i) with multix across OpenAI (API or Codex driver), Gemini Nano Banana and Imagen, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai, Atlas Cloud, Replicate and Runway Gen-4 Image, including provider decision trees, reference image limits and WebP output rules. Use for text-to-image, image edit, style transfer (watercolor, cyberpunk), reference images or character consistency.
+description: Generate images from a text prompt and edit existing images (image-to-image, i2i) with multix across OpenAI (API or Codex driver), Gemini Nano Banana, MiniMax, OpenRouter, Leonardo, BytePlus Seedream, Cloudflare Workers AI FLUX.1 Schnell, fal.ai, Atlas Cloud, Replicate and Runway Gen-4 Image, including provider decision trees, reference image limits and WebP output rules. Use for text-to-image, image edit, style transfer (watercolor, cyberpunk), reference images or character consistency.
 version: 1.22.0-beta.2 # x-release-please-version
 license: MIT
 metadata:
@@ -21,9 +21,9 @@ Check verified model capabilities before picking a model: `multix models --task 
 | Provider | Command | Notes |
 |---|---|---|
 | OpenAI | `multix openai generate --prompt "<text>" [--driver api\|codex\|auto] [--model gpt-image-2] [--size 1024x1024] [--quality medium] [--format png]` | API first; Codex driver is experimental image-only fallback |
-| Gemini | `multix gemini generate --prompt "<text>" [--model gemini-3.1-flash-image-preview] [--aspect-ratio 16:9] [--size 1K\|2K\|4K] [--num-images N]` | Nano Banana 2 (default), Imagen 4 (`imagen-4.0-generate-001`) |
+| Gemini | `multix gemini generate --prompt "<text>" [--model gemini-3.1-flash-image] [--aspect-ratio 16:9] [--size 1K\|2K\|4K] [--num-images N]` | Nano Banana 2 (default), `gemini-3.1-flash-lite-image` (fast, low cost), `gemini-3-pro-image`, `gemini-nano-banana-2.1`. Imagen 4 is no longer served |
 | MiniMax | `multix minimax generate --prompt "<text>" [--model image-01] [--aspect-ratio 1:1] [-n N]` | |
-| OpenRouter | `multix openrouter generate --prompt "<text>" [--model <id>] [--aspect-ratio 16:9] [--image-size 2K] [--num-images N]` | Default `google/gemini-3.1-flash-image-preview` |
+| OpenRouter | `multix openrouter generate --prompt "<text>" [--model <id>] [--aspect-ratio 16:9] [--image-size 2K] [--num-images N]` | Default `google/gemini-3.1-flash-image` |
 | Leonardo | `multix leonardo generate "<text>" [-w 1024 -h 1024] [--alchemy] [--ultra] [--quality HIGH]` | Polls until done, downloads automatically |
 | BytePlus | `multix byteplus generate --prompt "<text>" [--model seedream-4-0-250828] [--size 2K] [--aspect-ratio 16:9] [-n N] [--input-image <path\|url>]` | Sync |
 | Cloudflare | `multix cloudflare generate --prompt "<text>" [--steps 1-8] [--seed <n>]` | Workers AI FLUX.1 Schnell only |
@@ -93,7 +93,7 @@ Atlas Cloud image edits (`multix atlas image-to-image`) are in [../SKILL.md](../
 
 | Family | Example model id | Modalities | Flag notes |
 |---|---|---|---|
-| Gemini | `google/gemini-2.5-flash-image`, `google/gemini-3.1-flash-image-preview` | `["image","text"]` | Default model |
+| Gemini | `google/gemini-2.5-flash-image`, `google/gemini-3.1-flash-image` | `["image","text"]` | Default model |
 | OpenAI gpt-image | `openai/gpt-5.4-image-2`, `openai/gpt-5-image-mini`, `openai/gpt-5-image` | `["image","text"]` | |
 | Recraft | `recraft/recraft-v3` | `["image","text"]` | Accepts `--strength 0..1` (init-image strength) |
 | Flux (Black Forest Labs) | `black-forest-labs/flux.2-pro`, `flux.2-max`, `flux.2-flex` | `["image"]` | Image-only output |
