@@ -144,25 +144,40 @@ hạn):
 
 - body request chuyển thẳng tới provider: `fal run`, `replicate run`,
   `atlas run`, `heygen run`, `topview run`, `--input` của `replicate image`
-  và `replicate video`, `--input` / `--text-field` của `fal tts`, và
-  `--param` của `sume image`;
+  và `replicate video`, `--input` / `--text-field` của `fal tts`,
+  `--param` của `sume image`, `--provider-options` của `openrouter tts`, và
+  `--flags` (cờ model thô) của `byteplus generate-3d`;
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
   video-avatar`, `topview product-avatar`, và `heygen video-agent` /
   `heygen template`, nơi agent hoặc template quyết định độ dài;
+- lần chạy dài hơn mức giới hạn thời lượng chặn được: `topview url-to-video`
+  và `topview materials-to-video` (video 15-60 giây), và `elevenlabs music`,
+  nơi model tự chọn độ dài (tới 10 phút) trừ khi `--music-length-ms` hoặc
+  `--plan` quy định;
 - `sume video`, nơi dòng catalog của model quyết định giá, còn model lip-sync
   và phụ đề tính tiền theo độ dài media nguồn;
-- `atlas image`, `atlas image-to-image`, `sume image` và `replicate image` khi không có
-  `--num-images` / `--num-outputs`, lúc đó model tự chọn số output. Truyền số
-  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại.
+- `atlas image`, `atlas image-to-image`, `sume image` và `replicate image`
+  khi không có `--num-images` / `--num-outputs`, lúc đó model tự chọn số
+  output. Truyền số
+  lượng (tối đa `MULTIX_MCP_MAX_OUTPUTS`) giúp lần chạy được giới hạn trở lại;
+- `fal video`, lệnh không có `--resolution`: model tự chọn độ phân giải;
+- `atlas video`, `atlas image-to-video`, `replicate video`,
+  `openrouter image-to-video` và `heygen model-video` khi không có
+  `--resolution`, lúc đó độ phân giải mặc định của model được dùng. Truyền một
+  giá trị trong `MULTIX_MCP_ALLOWED_RESOLUTIONS` giúp lần chạy được giới hạn
+  trở lại, với model nhận độ phân giải (một số model Atlas không nhận, nên
+  luôn không bị giới hạn). Với `openrouter image-to-video`, giá trị này là yêu
+  cầu mà model có thể làm tròn.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
 `max_cost_usd` và job chỉ khởi động khi ước tính giá chứng minh lần chạy nằm
 trong mức đó (`cost_policy` được coi là `strict` với các lần chạy này, vì ước
-tính không nhìn thấy phần không bị giới hạn). Hiện chưa lệnh nào trong số này có bảng giá, nên trên thực tế
-`budget` từ chối chúng (đóng thay vì mở). `deny` luôn từ chối; `allow` chạy như
-trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
+tính không nhìn thấy phần không bị giới hạn). Trong số này chỉ
+`openrouter tts` có ước tính giá, và chỉ với model đã biết giá, nên trên thực
+tế `budget` từ chối các lệnh còn lại (đóng thay vì mở). `deny` luôn từ chối;
+`allow` chạy như trước, bằng key của chính người gọi. Lệnh gọi `estimate: true` luôn được trả
 lời ở mọi chế độ vì nó không khởi động gì. REST API (`POST /api/v1/jobs`) nhận
 cùng các trường `max_cost_usd` và `cost_policy` và áp dụng cùng quy tắc.
 
@@ -698,7 +713,8 @@ chung bộ đếm.
 - **Giới hạn chi phí:** `multix_run` giới hạn số output, thời lượng video và
   độ phân giải video trên các option mà server biết cho từng lệnh (xem
   [Chạy lệnh CLI](#chạy-lệnh-cli)). Lần chạy mà các giới hạn đó không chặn
-  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output do model chọn)
+  được (body JSON chuyển thẳng, giá theo độ dài nguồn, số output hoặc độ phân
+  giải do model chọn)
   bị từ chối trừ khi `max_cost_usd` chứng minh được giá, hoặc theo
   `MULTIX_MCP_UNCAPPED_SPEND`. Người gọi cũng có thể đặt `max_cost_usd` để từ
   chối mọi lần chạy có thể tốn hơn mức đó.
