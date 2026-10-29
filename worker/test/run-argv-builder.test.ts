@@ -779,9 +779,19 @@ describe("prepareRun: runs the caps cannot bound", () => {
       run({ command: "byteplus generate-3d", options: { prompt: "a cube", flags: "--ff 2" } })
         .uncappedSpend,
     ).toBe("with --flags, the server caps do not bound the request");
-    expect(run({ command: "elevenlabs music", options: { prompt: "jazz" } }).uncappedSpend).toBe(
-      "billed by length, which the model picks (up to 10 minutes) unless given",
+    expect(run({ command: "elevenlabs music", options: { prompt: "jazz" } })).not.toHaveProperty(
+      "uncappedSpend",
     );
+    expect(
+      run({ command: "elevenlabs music", options: { prompt: "jazz", "music-length-ms": 20000 } }),
+    ).not.toHaveProperty("uncappedSpend");
+    expect(
+      run({
+        command: "elevenlabs music",
+        options: {},
+        inputs: { plan: "https://cdn.example.com/plan.json" },
+      }).uncappedSpend,
+    ).toBe("with --plan, the server caps do not bound the request");
   });
 
   it("marks Sume and TopView runs the caps cannot bound", () => {
@@ -820,6 +830,63 @@ describe("prepareRun: runs the caps cannot bound", () => {
       }),
     ).not.toHaveProperty("uncappedSpend");
   });
+
+  it("caps the generated audio length with MULTIX_MCP_MAX_AUDIO_SECONDS", async () => {
+    expect(limits.maxAudioSeconds).toBe(30);
+    expect(limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "9999" }).maxAudioSeconds).toBe(300);
+    expect(limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "abc" }).maxAudioSeconds).toBe(30);
+    rejects(
+      { command: "elevenlabs music", options: { prompt: "jazz", "music-length-ms": 300000 } },
+      /--music-length-ms must be at most 30000 \(30 seconds\)/,
+    );
+    rejects(
+      { command: "elevenlabs music", options: { prompt: "jazz", "music-length-ms": "1e6" } },
+      /--music-length-ms must be a plain decimal number of at least 1/,
+    );
+    rejects(
+      { command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": 30.5 } },
+      /--duration-seconds must be at most 30 \(30 seconds\)/,
+    );
+    const sfx = run({
+      command: "elevenlabs sfx",
+      options: { text: "rain", "duration-seconds": 0.5 },
+    });
+    expect(sfx.argv).toContain("--duration-seconds=0.5");
+    rejects(
+      { command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": "0.4" } },
+      /--duration-seconds must be a plain decimal number of at least 0.5/,
+    );
+    expect(sfx).not.toHaveProperty("uncappedSpend");
+    // Within the default cap, an omitted sfx length is left to the provider (auto, at most 30 s).
+    expect(run({ command: "elevenlabs sfx", options: { text: "rain" } }).argv).toEqual([
+      "elevenlabs",
+      "sfx",
+      "--text=rain",
+    ]);
+    // The music model picks up to 10 minutes on its own, so an omitted length gets the cap.
+    const song = run({ command: "elevenlabs music", options: { prompt: "jazz" } });
+    expect(song.argv).toContain("--music-length-ms=30000");
+    expect(song).not.toHaveProperty("uncappedSpend");
+    // The API rejects a length next to a composition plan: none is filled, and the run is uncapped.
+    const planned = prepareRun(
+      { command: "elevenlabs music", inputs: { plan: "https://cdn.example.com/plan.json" } },
+      limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "10" }),
+    );
+    expect(planned.argv.some((a) => a.startsWith("--music-length-ms"))).toBe(false);
+    expect(planned.uncappedSpend).toBe("with --plan, the server caps do not bound the request");
+    const tight = limitsFrom({ MULTIX_MCP_MAX_AUDIO_SECONDS: "10" });
+    const music = prepareRun({ command: "elevenlabs music", options: { prompt: "jazz" } }, tight);
+    expect(music.argv).toContain("--music-length-ms=10000");
+    expect((await parseWithCli(music.argv, "elevenlabs music")).opts.musicLengthMs).toBe("10000");
+    const auto = prepareRun({ command: "elevenlabs sfx", options: { text: "rain" } }, tight);
+    expect(auto.argv).toContain("--duration-seconds=10");
+    expect(() =>
+      prepareRun(
+        { command: "elevenlabs sfx", options: { text: "rain", "duration-seconds": 11 } },
+        tight,
+      ),
+    ).toThrow(/--duration-seconds must be at most 10 \(10 seconds\)/);
+  }, 120_000);
 
   it("leaves capped commands unmarked and caps the voice-design count", () => {
     expect(run({ command: "gemini generate", options: { prompt: "a cat" } })).not.toHaveProperty(

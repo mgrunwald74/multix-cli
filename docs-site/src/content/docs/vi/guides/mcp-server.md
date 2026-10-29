@@ -127,8 +127,12 @@ cả hai trường hợp. Key không bao giờ xuất hiện trong `stdout` hay
 
 Giới hạn của server cũng áp dụng cho `multix_run`: số output
 (`MULTIX_MCP_MAX_OUTPUTS`), độ dài video (`MULTIX_MCP_MAX_VIDEO_SECONDS`, cũng
-được gửi khi mặc định của lệnh video không rõ hoặc dài hơn) và độ phân giải
-(`MULTIX_MCP_ALLOWED_RESOLUTIONS`). Server tự chọn thư mục đầu ra, `--output`
+được gửi khi mặc định của lệnh video không rõ hoặc dài hơn), độ phân giải
+(`MULTIX_MCP_ALLOWED_RESOLUTIONS`) và độ dài audio sinh ra
+(`MULTIX_MCP_MAX_AUDIO_SECONDS`: `elevenlabs sfx --duration-seconds` và
+`elevenlabs music --music-length-ms`; độ dài nhạc bị bỏ qua sẽ được gửi bằng
+giới hạn, vì nếu không model tự chọn tới 10 phút).
+Server tự chọn thư mục đầu ra, `--output`
 phải là tên file thuần, option mà CLI ghép vào tên file (như
 `elevenlabs voices design --output-prefix` hoặc mã ngôn ngữ khi lồng tiếng) chỉ
 nhận chữ cái, chữ số, `_` và `-`, các lệnh ảnh OpenAI luôn dùng API driver,
@@ -150,11 +154,10 @@ hạn):
 - lần chạy tính tiền theo độ dài nguồn hoặc kịch bản: `heygen video`,
   `heygen translate`, `heygen lipsync`, `elevenlabs dub`, `topview
   video-avatar`, `topview product-avatar`, và `heygen video-agent` /
-  `heygen template`, nơi agent hoặc template quyết định độ dài;
+  `heygen template`, nơi agent hoặc template quyết định độ dài, và
+  `elevenlabs music` khi có `--plan`, nơi thời lượng các đoạn quyết định độ dài;
 - lần chạy dài hơn mức giới hạn thời lượng chặn được: `topview url-to-video`
-  và `topview materials-to-video` (video 15-60 giây), và `elevenlabs music`,
-  nơi model tự chọn độ dài (tới 10 phút) trừ khi `--music-length-ms` hoặc
-  `--plan` quy định;
+  và `topview materials-to-video` (video 15-60 giây);
 - `sume video`, nơi dòng catalog của model quyết định giá, còn model lip-sync
   và phụ đề tính tiền theo độ dài media nguồn;
 - `atlas image`, `atlas image-to-image`, `sume image` và `replicate image`
@@ -658,6 +661,7 @@ closed). `http://localhost` được chấp nhận khi phát triển cục bộ.
 | `MULTIX_PUBLIC_URL` | — (bắt buộc) | Origin công khai, ví dụ `https://mcp.example.com`. Dùng cho metadata OAuth, redirect và callback GitHub. |
 | `MULTIX_MCP_MAX_OUTPUTS` | `4` (tối đa 10) | Số output tối đa (ví dụ `--num-images`) mỗi lần gọi `multix_run`. |
 | `MULTIX_MCP_MAX_VIDEO_SECONDS` | `10` (tối đa 15) | Thời lượng video tối đa cho mỗi lần gọi (với `gemini extend-video` là đoạn nối tiếp mới). Khi caller bỏ qua thời lượng và mặc định của lệnh không rõ hoặc dài hơn, server gửi `min(5, giới hạn)` giây. |
+| `MULTIX_MCP_MAX_AUDIO_SECONDS` | `30` (tối đa 300) | Độ dài audio sinh ra tối đa cho mỗi lần gọi: `elevenlabs sfx --duration-seconds` và `elevenlabs music --music-length-ms`. Độ dài nhạc bị bỏ qua được gửi bằng giới hạn (nếu không model tự chọn tới 10 phút), trừ khi có `--plan`; độ dài hiệu ứng âm thanh bị bỏ qua chỉ được gửi bằng giới hạn khi giới hạn thấp hơn mức tối đa 30 giây của nhà cung cấp. |
 | `MULTIX_MCP_ALLOWED_RESOLUTIONS` | `480p,720p,768p,1080p` | Độ phân giải video caller được yêu cầu (`768p` là kích thước của HeyGen Video). Giá trị khác (ví dụ `4k`), do caller truyền hay là mặc định của lệnh, bị từ chối trước khi job bắt đầu. |
 | `MULTIX_MCP_UNCAPPED_SPEND` | `budget` | Lần chạy mà các giới hạn trên không chặn được (đánh dấu `uncapped_spend` trong `multix_catalog`): `budget` chỉ chạy khi có `max_cost_usd` mà ước tính giá chứng minh được (giá không rõ thì bị từ chối), `deny` từ chối, `allow` cho chạy. Giá trị khác được hiểu là `budget`. |
 | `MULTIX_MCP_ALLOWED_ORIGINS` | không có | Origin trình duyệt chính xác (ví dụ `https://app.example.com`) được phép gọi `/mcp`. Không hỗ trợ `*` hay wildcard khác: `*` chỉ khớp origin `*` theo nghĩa đen, thứ trình duyệt không bao giờ gửi. Sau khi access token được kiểm tra, request có header `Origin` khác nhận `403`; request không có `Origin` (client phía server) được chấp nhận. Origin trong danh sách nhận header CORS. Preflight `OPTIONS` được lớp OAuth trả lời cho mọi origin. |
