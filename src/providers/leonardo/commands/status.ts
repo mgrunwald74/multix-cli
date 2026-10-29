@@ -15,7 +15,7 @@ import { createLogger } from "../../../core/logger.js";
 import { getOutputDir } from "../../../core/output-dir.js";
 import { maybeDownloadThumb } from "../../../core/video-thumb.js";
 import { createLeonardoClient } from "../client.js";
-import { PollFailedError, PollTimeoutError, poll } from "../poll.js";
+import { poll, toGenerationError } from "../poll.js";
 import type { Generation, GetGenerationResponse } from "../types.js";
 
 const VIDEO_KEYS = ["motionMP4URL", "url"];
@@ -86,15 +86,11 @@ export function registerLeonardoStatusCommand(parent: Command): void {
               })
             : await fetchOnce();
         } catch (e) {
-          if (e instanceof PollTimeoutError) {
-            logger.error(`Timed out waiting for generation ${generationId}`);
-            process.exit(1);
-          }
-          if (e instanceof PollFailedError) {
-            logger.error(`Generation failed: ${JSON.stringify(e.value)}`);
-            process.exit(1);
-          }
-          throw e;
+          throw toGenerationError(
+            e,
+            generationId,
+            `multix leonardo status ${generationId} --wait${opts.download ? " --download" : ""}`,
+          );
         }
 
         const gen = res.generations_by_pk;
