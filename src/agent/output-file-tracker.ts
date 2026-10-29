@@ -10,16 +10,28 @@ import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolveOutputDir } from "../core/output-dir.js";
 import { run } from "./run-state.js";
 
-function track(target: unknown): void {
-  if (typeof target === "string") run.written.add(path.resolve(target));
-  else if (target instanceof URL && target.protocol === "file:") run.written.add(target.pathname);
+/** The absolute path an fs call writes to: a string path or a `file:` URL (decoded, OS form). */
+function targetPath(target: unknown): string | undefined {
+  if (typeof target === "string") return path.resolve(target);
+  if (target instanceof URL && target.protocol === "file:") return fileURLToPath(target);
+  return undefined;
 }
 
-function untrack(target: unknown): void {
-  if (typeof target === "string") run.written.delete(path.resolve(target));
+function track(target: unknown): void {
+  const file = targetPath(target);
+  if (file) run.written.add(file);
+}
+
+/** Resolves both paths before changing the set, so a bad target leaves it as it was. */
+function trackRename(from: unknown, to: unknown): void {
+  const src = targetPath(from);
+  const dest = targetPath(to);
+  if (src) run.written.delete(src);
+  if (dest) run.written.add(dest);
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: wraps arbitrary fs signatures
@@ -43,17 +55,11 @@ export function installOutputFileTracker(): void {
   }
   for (const name of ["copyFileSync", "copyFile"]) wrap(fs, name, (args) => track(args[1]));
   for (const name of ["renameSync", "rename"]) {
-    wrap(fs, name, (args) => {
-      untrack(args[0]);
-      track(args[1]);
-    });
+    wrap(fs, name, (args) => trackRename(args[0], args[1]));
   }
   wrap(fs.promises, "writeFile", (args) => track(args[0]));
   wrap(fs.promises, "copyFile", (args) => track(args[1]));
-  wrap(fs.promises, "rename", (args) => {
-    untrack(args[0]);
-    track(args[1]);
-  });
+  wrap(fs.promises, "rename", (args) => trackRename(args[0], args[1]));
   syncBuiltinESMExports();
 }
 
