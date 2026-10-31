@@ -66,20 +66,27 @@
     "bindings": [
       { "name": "MULTIX_JOBS", "class_name": "MultixJobContainer" },
       { "name": "MULTIX_JOB_QUOTA", "class_name": "AccountJobQuota" },
-      { "name": "MULTIX_EVENTS", "class_name": "AccountEvents" }
+      { "name": "MULTIX_EVENTS", "class_name": "AccountEvents" },
+      { "name": "MULTIX_SKILLS", "class_name": "AccountSkills" }
     ]
   },
   // Declarative Durable Object config (wrangler 4.149+); replaces `migrations`.
   "exports": {
     "MultixJobContainer": { "type": "durable-object", "storage": "sqlite" },
     "AccountJobQuota": { "type": "durable-object", "storage": "sqlite" },
-    "AccountEvents": { "type": "durable-object", "storage": "sqlite" }
+    "AccountEvents": { "type": "durable-object", "storage": "sqlite" },
+    "AccountSkills": { "type": "durable-object", "storage": "sqlite" }
   },
   "vars": {
     "MULTIX_PUBLIC_URL": "https://multix.zuey.me",
     "MULTIX_MCP_MAX_OUTPUTS": "4",
     "MULTIX_MCP_MAX_VIDEO_SECONDS": "10",
+    "MULTIX_MCP_MAX_AUDIO_SECONDS": "30",
     "MULTIX_MCP_ALLOWED_RESOLUTIONS": "480p,720p,768p,1080p",
+    // <group>:<model> entries image commands may use (empty: any model), e.g. "fal:fal-ai/flux/schnell,openai:gpt-image-2".
+    "MULTIX_MCP_ALLOWED_IMAGE_MODELS": "",
+    // Runs the caps above cannot bound (fal run, heygen translate, ...): budget | deny | allow.
+    "MULTIX_MCP_UNCAPPED_SPEND": "budget",
     // multix_run jobs running at once: per account, and across the server.
     "MULTIX_MAX_JOBS_PER_ACCOUNT": "2",
     "MULTIX_MAX_JOBS_TOTAL": "10"

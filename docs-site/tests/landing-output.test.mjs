@@ -32,7 +32,7 @@ test("headline and subline", () => {
   );
   assert.match(pages.vi, /<em>và trí tưởng tượng\.<\/em>/);
   assert.match(pages.en, /Unlock multimodal for every AI agent/);
-  assert.match(pages.en, /14 providers behind one CLI, one MCP server and one REST API/);
+  assert.match(pages.en, /16 providers behind one CLI, one MCP server and one REST API/);
 });
 
 test("canonical, hreflang alternates and social meta", () => {
@@ -131,7 +131,12 @@ test("providers section lists every provider from the CLI source in both languag
   for (const group of ["doc", "speech", "scene"]) groups.delete(group);
   // Provider names as `multix check` prints them; Cloudflare is checked on its own there.
   const keys = await readRoot("src/providers/provider-keys.ts");
-  const names = [...keys.matchAll(/^\s*name: "([^"]+)",/gm)].map(([, name]) => name);
+  // TopView Platform is a second key of the same `multix topview` group, shown on its card.
+  const names = [...keys.matchAll(/^\s*name: "([^"]+)",/gm)]
+    .map(([, name]) => name)
+    .filter((name) => name !== "TopView Platform");
+  // Sume models come only from its live catalog, so its card lists none.
+  const liveCatalog = new Set(["sume"]);
   assert.ok(groups.size >= 14 && names.length >= 13, "source lists were not found");
 
   const titles = {
@@ -153,6 +158,11 @@ test("providers section lists every provider from the CLI source in both languag
     for (const card of cards) {
       const group = /^"([^"]+)"/.exec(card)[1];
       assert.ok(card.includes(`<code>multix ${group}</code>`), `${lang}: ${group} command`);
+      if (liveCatalog.has(group)) {
+        assert.ok(!card.includes("mx-provider-models"), `${lang}: ${group} lists no models`);
+        assert.match(card, /^[\s\S]*?<h3[^>]*>[^<]+<\/h3>[\s\S]*?<h4/);
+        continue;
+      }
       const models = card.slice(card.indexOf("mx-provider-models")).match(/<li>/g) ?? [];
       assert.ok(models.length >= 2 && models.length <= 4, `${lang}: ${group} has 2-4 models`);
       // Headings stay in order inside the card: provider (h3), then its two lists (h4).

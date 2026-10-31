@@ -4,7 +4,7 @@ AI multimodal CLI — generate images/video/speech/music, analyze and transcribe
 
 ![Isometric technical illustration of multix media workflows](docs-site/public/images/multix-isometric-banner.png)
 
-Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS).
+Supports **OpenAI** (image, image edits, TTS, STT, optional Codex image driver), **Gemini** (analyze, transcribe, generate, Omni Flash video generation and editing, Flash TTS), **MiniMax** (image, video, speech, music), **OpenRouter** (image generation, image-to-video, TTS, STT), **Leonardo.Ai** (image, video, upscale), **BytePlus** (Seedream image, Seedance video, Hyper3D / Hitem3d 3D), **Cloudflare** (Workers AI image and speech; AI Gateway-routed Replicate video), **ElevenLabs** (TTS, voice cloning, STT, voice changer, SFX, music, dubbing, isolation, alignment), **Fish Audio** (native Drama 3 TTS, multi-speaker turns, pronunciation dictionaries, voice design, voice cloning, voice models), **fal.ai** (generic model runner, image, video, text-to-speech via the fal queue API), and **Atlas Cloud** (any model: image, image edit, video, audio, 3D, with resumable async predictions), **Replicate** (generic model runner, image, video, async prediction status/cancel via the direct Replicate API), **Runway** (Gen-4.5 and Gen-4 Turbo video, Gen-4 images, resumable task status/cancel), **HeyGen** (v3 Video Agent prompt-to-video, scripted avatar videos, video translation, lipsync, TTS), **Sume** (any image or video model in Sume's catalog, including lip-sync and captions, on one key, with resumable or cancellable jobs), **TopView** (Legacy API product marketing videos, talking and product avatars, product shots; API Platform models such as Seedance, Wan and GPT Image 2).
 
 ## Documentation
 
@@ -68,6 +68,7 @@ multix fal image "a red fox" --json           # one-line multix.result/v1 envelo
 multix elevenlabs tts --text "Hi" --estimate  # price range, units, rate and source; nothing is sent
 multix elevenlabs tts --text "Hi" --max-cost 0.01  # refuse before sending unless the cost fits
 multix history stats --by model               # runs, success rate, p50/p90 time, cost, credits, tokens
+multix catalog compare -t video --resolution 720p --duration 10 --audio on --aspect-ratio 16:9  # rank prices for one exact request
 multix rerun last                             # repeat a recorded run
 ```
 
@@ -102,6 +103,17 @@ lists with status `missing` (unless the catalog was too long to read in full,
 `truncated`, when it stays unknown). Catalogs are cached for a day in `~/.multix/cache/models`
 (`--refresh` refetches); offline, a stale copy up to 7 days old is used, or the
 catalog is reported `unavailable` and nothing is claimed available.
+
+`multix catalog` compares offerings (provider + model) before a run. Prices are
+per configuration (resolution, audio, variant), each with its source URL and
+check date; a price that is missing, unverified, checked more than 120 days ago
+or outside its window shows as unknown with the reason, never $0. `compare`
+ranks only rows whose price confirms every setting you pinned (others are
+`not_comparable` or `unknown`, with the reason) and says nothing about quality.
+`usage` counts only runs that went through multix on this machine, `rate`,
+`review` and `note` keep your own verdicts in a private or project store (text
+is scrubbed and returned as untrusted data), and `recommend` scores offerings
+from that evidence. Details: [Catalogue](https://multix.zuey.me/commands/catalog/).
 
 ## Environment variables
 
@@ -157,15 +169,22 @@ Set at least one provider key. Add to `.env` in your project root or `~/.multix/
 | `RUNWAY_BASE_URL` | No | Override Runway API root (default `https://api.dev.runwayml.com`) |
 | `RUNWAY_VIDEO_MODEL` | No | Default `multix runway video` model (default `gen4.5`) |
 | `RUNWAY_IMAGE_MODEL` | No | Default `multix runway image` model (default `gen4_image`) |
+| `SUME_API_KEY` | For Sume | [Sume app](https://app.sume.com) (API keys, USD balance) |
+| `SUME_BASE_URL` | No | Override Sume API root (default `https://api.sume.com`) |
+| `SUME_IMAGE_MODEL` / `SUME_VIDEO_MODEL` | No | Default `multix sume image` / `video` model. No built-in default: pass `-m` or set these (`multix sume models` lists IDs) |
+| `TOPVIEW_API_KEY` / `TOPVIEW_UID` | For TopView Legacy API | Both from [TopView API Settings](https://www.topview.ai/api-settings); billed in plan credits |
+| `TOPVIEW_PLATFORM_API_KEY` | For TopView API Platform | [TopView API Platform](https://platform.topview.ai); separate USD balance, not interchangeable with the Legacy key |
+| `TOPVIEW_BASE_URL` / `TOPVIEW_PLATFORM_BASE_URL` | No | Override the Legacy API root (default `https://api.topview.ai`) / API Platform root (default `https://platform-backend.topview.ai`) |
 | `CLOUDFLARE_AI_IMAGE_MODEL` | No | Image model setting; only `@cf/black-forest-labs/flux-1-schnell` is accepted |
 | `CLOUDFLARE_AI_TTS_MODEL` | No | Speech model setting; only `@cf/myshell-ai/melotts` is accepted |
 | `MULTIX_OUTPUT_DIR` | No | Override default output dir (`./multix-output`) |
-| `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate, Runway or Atlas Cloud output file (default `2048`) |
+| `MULTIX_MAX_DOWNLOAD_MB` | No | Size limit per downloaded Replicate, Runway, Atlas Cloud, Sume or TopView output file (default `2048`) |
 | `MULTIX_UPLOAD_MIN_KBPS` | No | Slowest upload speed to allow for (Gemini Files API, Runway requests with inline images), in KB/s (default `1000`); lower it on slow links |
 | `MULTIX_IMAGE_FORMAT` | No | `webp` (default) or `original` to keep provider image format/quality |
 | `MULTIX_OUTPUT` | No | `json` prints one `multix.result/v1` envelope per run, as `--json` does |
 | `MULTIX_HISTORY` | No | `0` stops recording runs in `~/.multix/history.jsonl` |
 | `MULTIX_HISTORY_FILE` | No | Run ledger path (shell or `~/.multix/.env` only) |
+| `MULTIX_CATALOG_FILE` | No | Private `multix catalog` ratings, reviews and notes (default `~/.multix/catalog-notes.json`; shell or `~/.multix/.env` only) |
 | `MULTIX_CACHE_DIR` | No | Cache root for `multix models --live` catalogs (default `~/.multix/cache`; shell or `~/.multix/.env` only) |
 | `MULTIX_MODELS_TTL` | No | Seconds a cached catalog stays fresh (default `86400`, at most `604800`) |
 | `OPENROUTER_IMAGE_MODEL` | No | Default OpenRouter model |
@@ -186,7 +205,7 @@ Set extra keys as `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`, … (any numeric suffi
 
 Priority: `process.env` > `cwd/.env` > `~/.multix/.env`. A blank or whitespace-only value in a `.env` file does not count as set, so a project `.env` copied from `.env.example` does not hide `~/.multix/.env`; a shell variable wins even when blank. Set `MULTIX_LEGACY_CLAUDE_ENV=1` (shell or `~/.multix/.env`) to also read legacy AgentKit files (`.claude/skills/{ai-multimodal,ak-ai-multimodal}/.env`, `.claude/skills/.env`, `.claude/.env`, project first, then home) with the lowest priority (credential names only, never endpoint/proxy settings); `multix check -v` lists the env files that were loaded.
 
-A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`, `MULTIX_MODELS_TTL`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE` and `MULTIX_CACHE_DIR`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
+A project `.env` may only set variables `multix` reads: provider keys, the provider settings in `.env.example` (`*_BASE_URL`, model overrides, Cloudflare IDs), the documented `MULTIX_*` settings (`MULTIX_OUTPUT_DIR`, so a project can choose where outputs go, `MULTIX_IMAGE_FORMAT`, `MULTIX_MAX_DOWNLOAD_MB`, `MULTIX_UPLOAD_MIN_KBPS`, `MULTIX_OUTPUT`, `MULTIX_HISTORY`, `MULTIX_MODELS_TTL`) and `NO_COLOR`. The opt-ins `MULTIX_ALLOW_PROJECT_BASE_URL` and `MULTIX_LEGACY_CLAUDE_ENV`, and `MULTIX_HISTORY_FILE`, `MULTIX_CACHE_DIR` and `MULTIX_CATALOG_FILE`, are refused there; set them in the shell or `~/.multix/.env`. Other names, such as `NODE_OPTIONS`, `npm_config_registry`, `LD_PRELOAD` or `HTTPS_PROXY`, are not loaded, so they never reach `multix` or the tools it starts (`npm` in `multix update`, ffmpeg, ImageMagick, cwebp); one warning on stderr lists the ignored names, never their values. The shell and `~/.multix/.env` are not filtered.
 
 `*_BASE_URL`, `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_GATEWAY_ID` decide where your API key is sent. Values from the shell or `~/.multix/.env` are always used. A value from the project `.env` (or a legacy `.claude` file under it) is used only when every key the provider sends with it comes from that same project file (the repository's own key). That protects your key, not your data: a project `.env` that ships its own key and base URL routes that project's requests, including your prompts and any files you upload, to that host, and its key replaces yours from `~/.multix/.env`, so review a cloned repository's `.env` before running `multix` in it. If a key comes from anywhere else, the project value is ignored: the `~/.multix/.env` value is used with a warning (variable, file and key source named, never the value), or, if there is none, the command stops with an error instead of falling back to the vendor default. `multix check` shows whether each such setting is in effect or ignored. To use a project value for one command, run `MULTIX_ALLOW_PROJECT_BASE_URL=1 multix ...`; do not put the opt-in in `~/.multix/.env`, which disables the check for every directory. Non-default base URLs must be `https://` (plain `http://` only for `localhost`, `127.0.0.1`, `[::1]`), and `multix` warns once per variable on stderr with the provider and hostname only.
 ## Commands
@@ -259,11 +278,11 @@ multix gemini generate-speech --text "Joe: How's it going? Jane: Not too bad!" \
 
 **Gemini models:**
 - Text output (analyze, transcribe, extract, doc convert): `gemini-3.6-flash` (default), `gemini-3.5-flash` (manual override)
-- Image gen: `gemini-3.1-flash-image-preview` (Nano Banana 2, fastest), `gemini-3-pro-image-preview` (4K text), `imagen-4.0-generate-001` (production)
+- Image gen: `gemini-3.1-flash-image` (Nano Banana 2, default), `gemini-3.1-flash-lite-image` (fast, low cost), `gemini-3-pro-image` (4K text), `gemini-nano-banana-2.1` (Google's recommended successor). Imagen 4 is no longer served on the Gemini API, and the `-preview` image ids are past their earliest announced shutdown date and may stop at any time.
 - Video: `gemini-omni-1.1-flash` (default, Interactions API, requires billing). Legacy `veo-*` models still run with an explicit `--model`; see [Gemini video migration](#gemini-video-migration-veo-to-omni-flash).
 - TTS: `gemini-3.8-flash-lite-tts` (default, fast/cheap, 101 languages), `gemini-3.8-flash-tts` (highest fidelity, 130 languages), legacy `gemini-3.1-flash-tts-preview`, `gemini-2.5-flash-preview-tts`, `gemini-2.5-pro-preview-tts`. Gemini 3.8 models use the Interactions API, read the text verbatim, take delivery direction via `--style`, and also accept custom `voice_…`/`voicekey_…` voice ids.
 
-`gemini-3.6-flash` is a text-output model. Use Nano Banana/Imagen for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.
+`gemini-3.6-flash` is a text-output model. Use Nano Banana for images, Gemini Omni Flash for video, and Gemini Flash TTS for speech.
 
 #### Gemini video migration (Veo to Omni Flash)
 
@@ -312,7 +331,7 @@ multix minimax generate-music [--lyrics <str>] [--prompt <str>] [--model music-2
 ### `multix openrouter`
 
 ```bash
-multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image-preview] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
+multix openrouter generate --prompt "Retro robot" [--model google/gemini-3.1-flash-image] [--aspect-ratio 1:1] [--image-size <sz>] [--num-images 1] [-v]
 
 # Image-to-image (alias: i2i) — refs accept URL or local path
 multix openrouter image-to-image --prompt "make it cyberpunk" --ref ./photo.jpg [--ref https://...] [--model google/gemini-2.5-flash-image] [--strength 0.7] [--output <path>] [-v]
@@ -812,6 +831,51 @@ multix heygen me
 - `--callback-url` webhooks are signed with HMAC-SHA256 of the raw body (hex, `signature` header). The npm package does not export a verifier; copy `src/providers/heygen/webhook.ts` or the Node snippet in the [HeyGen docs](https://multix.zuey.me/commands/heygen/#webhooks).
 - Digital-twin creation and voice cloning are out of scope. Full reference: [HeyGen commands](https://multix.zuey.me/commands/heygen/).
 
+### `multix sume`
+
+[Sume](https://www.sume.com) API (`https://api.sume.com`, `SUME_API_KEY`): one key for every image and video model in Sume's catalog. The catalog decides which models exist and which flags each takes; multix checks every flag against the model's catalog row before anything is uploaded or billed, with no model fallback and no built-in default model.
+
+```bash
+multix sume models [--kind image|video|lipsync|captions] [--refresh] [--json]   # public catalog, no key, cached
+multix sume image "a red fox in snow" -m <model> [--image <path|url>]... [--aspect-ratio 16:9] [--num-images 2] [--wait]
+multix sume video "waves at dusk" -m <model> [--image <path|url>] [--end-image <path|url>] [--duration 8] [--wait]
+multix sume video -m <lipsync-model> --image ./face.png --audio ./speech.mp3 --duration 12
+multix sume status <job_id> [--wait] [--download]
+multix sume cancel <job_id>                       # only while the job is still queued
+multix sume estimate "waves" -m <model> --duration 8   # Sume's own quote, not billed
+```
+
+- Jobs are async by default: `image` and `video` print the job ID with check, resume and cancel commands. `--wait` polls and downloads.
+- `--estimate` / `--max-cost` price the request from the cached catalog; Sume reserves the price on submit and refunds failed and canceled jobs.
+- Every submit carries an `Idempotency-Key`; an interrupted submit prints the key to re-run with `--idempotency-key`.
+- Full reference: [Sume commands](https://multix.zuey.me/commands/sume/).
+
+### `multix topview`
+
+[TopView](https://www.topview.ai) has two APIs with separate keys and balances; neither key works on the other.
+
+```bash
+# Legacy API (TOPVIEW_API_KEY + TOPVIEW_UID, plan credits)
+multix topview url-to-video https://shop.example.com/p/mug [--aspect-ratio 9:16] [--preview]
+multix topview materials-to-video --file ./front.jpg --file ./demo.mp4 --product-name "Mug" --product-description "350 ml"
+multix topview video-avatar --avatar-id <id> --tts-text "Welcome to our store"
+multix topview product-avatar --product-image ./bottle.png --avatar-id <id> --image-edit-prompt "..." --mode avatar4 --tts-text "..." --voice-id <id>
+multix topview product-anyshoot --mode try-on|background --product-image <path|url> ...
+multix topview status <kind> <taskId> [--wait] [--download]
+multix topview upload <file>
+multix topview credit
+
+# API Platform (TOPVIEW_PLATFORM_API_KEY, USD)
+multix topview models [--refresh]
+multix topview run bytedance/seedance-2.0/text-to-video --input '{"content":[{"type":"text","text":"a paper boat"}]}' [--wait]
+multix topview prediction <id> [--wait] [--download]
+```
+
+- Neither API has a cancel endpoint: a submitted task runs to completion and is billed.
+- `product-avatar` runs three paid tasks and always waits; each stage prints how to resume from its output.
+- `topview run` accepts only the verified routes `topview models` lists, and rejects a body whose shape does not match the route.
+- Full reference: [TopView commands](https://multix.zuey.me/commands/topview/).
+
 ### `multix speech`
 
 One text-to-speech interface over Gemini, OpenAI, ElevenLabs, MiniMax, Atlas Cloud, Fish Audio, OpenRouter and fal.ai. The provider commands above are unchanged; `speech` adds one set of flags, checks the request against the chosen model's documented capabilities before calling it, and never switches provider on its own.
@@ -965,10 +1029,17 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
 
 - Tools: `multix_catalog` (runnable commands, their options and file inputs,
   and `has_keys` per group from the caller's saved keys; always listed),
+  `multix_model_catalog` (offerings, prices per configuration and
+  comparisons, the same payload as the `data` of `multix catalog providers|models|compare --json`;
+  `show` there leaves out the local usage, ratings and notes the CLI adds; always
+  listed),
   `multix_run` (run one CLI command, for example
   `gemini analyze` or `media optimize`, in its own Cloudflare Container with
   ffmpeg and ImageMagick; waits up to `wait_seconds`, default 25, max 40,
-  container start included), `multix_job_status` and `multix_job_cancel`.
+  container start included), `multix_job_status`, `multix_job_cancel`,
+  `multix_skills` (read-only skills catalogue; always listed), and
+  `multix_skills_manage` (author your own skills; listed with `MULTIX_SKILLS`),
+  and `multix_workflow` (run a skill's workflow; listed with `MULTIX_SKILLS`).
   Each account runs at most `MULTIX_MAX_JOBS_PER_ACCOUNT` jobs at once
   (default 2; `busy: …` otherwise) and the server at most
   `MULTIX_MAX_JOBS_TOTAL` (default 10, keep it at or below the container
@@ -987,6 +1058,26 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   verified, signed `https://` webhooks to public hosts. Subscriptions are kept
   per account in the `MULTIX_EVENTS` Durable Object, next to the REST
   webhook subscriptions.
+- Skills: the server serves this repository's `skill/` directory (the `multix`
+  entry skill and its task skills, bundled at build time) as read-only
+  resources at `skill://multix/...`. Protocol `2026-07-28` clients use the
+  `io.modelcontextprotocol/skills` extension (`skills/list`, `skills/get`,
+  `resources/read`, `resources/directory/read`); 2025 clients use
+  `resources/list`, `resources/read` and `multix_skills`. Reading a skill never
+  runs it. Private and team skills have a per-account store (`MULTIX_SKILLS`):
+  `multix_skills_manage` and the REST routes `/api/v1/skills` and
+  `/api/v1/skill-shares` draft, publish, roll back and share them (owner-only
+  writes; a grantee adds a shared team skill before it is listed). See
+  [Skills](https://multix.zuey.me/guides/mcp-server/#skills).
+- Skill workflows: a private or team skill may ship `multix.workflow.json`, up
+  to 10 multix CLI steps with typed inputs and `{{inputs.x}}` /
+  `{{steps.<id>.outputs[n]}}` templates (each value stays one argument).
+  `multix_workflow` and `/api/v1/workflow-runs` run it only after the account
+  authorized that exact revision and manifest digest over REST
+  (`/api/v1/workflow-authorizations`, optional `max_cost_usd` for the whole
+  run); MCP cannot authorize. Each step is a normal job under the same caps and
+  checks, and a run advances when it is read. See
+  [Skill workflows](https://multix.zuey.me/guides/mcp-server/#skill-workflows).
 - Auth: OAuth 2.1 (dynamic client registration, PKCE) with GitHub sign-in.
   Only GitHub logins or verified emails in the `MULTIX_ALLOWED_USERS` secret
   can sign in.
@@ -1003,6 +1094,20 @@ instance runs at `https://multix.zuey.me/mcp` (invited GitHub accounts only).
   bounds each `gemini extend-video` continuation, not a stored clip that
   chained extends grew, nor a `gemini edit-video` of it),
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` (default `480p,720p,768p,1080p`),
+  `MULTIX_MCP_MAX_AUDIO_SECONDS` (default `30`, ceiling `300`: caps
+  `elevenlabs sfx --duration-seconds` and `elevenlabs music --music-length-ms`;
+  an omitted music length is sent as the cap, since the model would pick up to
+  10 minutes),
+  `MULTIX_MCP_ALLOWED_IMAGE_MODELS` (default any: the model sets the price of
+  each image, so when set to `<group>:<model>` entries such as
+  `fal:fal-ai/flux/schnell`, image commands run only with a model listed for
+  their group, given as `--model` or as the catalog default; a command without
+  a catalog default needs an explicit listed `--model`, and a group with no
+  entry is refused),
+  `MULTIX_MCP_UNCAPPED_SPEND` (default `budget`: runs those caps cannot bound,
+  such as `fal run`, `heygen translate` or an image size/quality tier other
+  than the default, start only with a `max_cost_usd`
+  their price estimate proves; `deny` refuses them, `allow` runs them),
   `MULTIX_MCP_ALLOWED_ORIGINS` (exact browser origins, with CORS), and the
   approximate per-account rate limiter. JSON-RPC batches are rejected.
 
@@ -1047,7 +1152,8 @@ Full guide: [Remote MCP server](https://multix.zuey.me/guides/mcp-server/).
 ### REST API
 
 The same server exposes a JSON REST API at `/api/v1` for scripts and CI
-(manage provider keys and R2 storage, read the catalog, run and poll jobs).
+(manage provider keys and R2 storage, read the catalog and the model catalogue
+at `GET /api/v1/model-catalog`, run and poll jobs).
 Create an account API key (`mxk_…`, shown once) in the **API keys** card at
 `/dashboard` and send it as `Authorization: Bearer <key>`:
 

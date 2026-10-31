@@ -96,6 +96,7 @@ export const EN = {
       CLOUDFLARE_ACCOUNT_ID: "Account ID",
       CLOUDFLARE_API_TOKEN: "API token (Workers AI permission)",
       CLOUDFLARE_AI_GATEWAY_ID: "AI Gateway ID (optional)",
+      TOPVIEW_UID: "Topview UID (account id sent with the key)",
     } as Record<string, string>,
   },
   storage: {

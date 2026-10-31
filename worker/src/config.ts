@@ -23,6 +23,7 @@ import {
   PROVIDER_SECRET_NAMES,
   type ProviderKeys,
 } from "./provider-secret-names.js";
+import type { AccountSkillsNamespace } from "./skills/account-skills.js";
 
 export interface RateLimiter {
   limit(options: { key: string }): Promise<{ success: boolean }>;
@@ -34,10 +35,24 @@ export interface ServerSettings {
   MULTIX_MCP_MAX_OUTPUTS?: string;
   /** Max video duration in seconds (default 10, hard cap 15). */
   MULTIX_MCP_MAX_VIDEO_SECONDS?: string;
+  /** Max generated audio length in seconds (default 30, hard cap 300). */
+  MULTIX_MCP_MAX_AUDIO_SECONDS?: string;
   /** Comma-separated video resolutions callers may request (default 480p,720p,768p,1080p). */
   MULTIX_MCP_ALLOWED_RESOLUTIONS?: string;
+  /**
+   * Comma-separated `<group>:<model>` entries the image commands of
+   * multix_run may use (default: any model), e.g. `fal:fal-ai/flux/schnell`.
+   * The model sets the price of each image.
+   */
+  MULTIX_MCP_ALLOWED_IMAGE_MODELS?: string;
   /** Comma-separated browser origins allowed to call /mcp. Requests with other Origins get 403. */
   MULTIX_MCP_ALLOWED_ORIGINS?: string;
+  /**
+   * Runs the caps above cannot bound (pass-through `run` bodies, spend set by
+   * the length of the source media): `budget` (default) runs one only with a
+   * max_cost_usd its price estimate proves, `deny` refuses it, `allow` runs it.
+   */
+  MULTIX_MCP_UNCAPPED_SPEND?: string;
 }
 
 export {
@@ -80,6 +95,8 @@ export interface WorkerEnv extends ServerSettings {
   MULTIX_JOB_QUOTA?: JobQuotaNamespace;
   /** Durable Object namespace of AccountEvents (event subscriptions and webhook deliveries per account). */
   MULTIX_EVENTS?: AccountEventsNamespace;
+  /** Durable Object namespace of AccountSkills (each account's versioned skills registry). */
+  MULTIX_SKILLS?: AccountSkillsNamespace;
   /** Jobs one account may run at the same time (default 2, at most 50). */
   MULTIX_MAX_JOBS_PER_ACCOUNT?: string;
   /** Jobs the server may run at the same time (default 10, at most 1000; keep <= containers max_instances). */
@@ -91,8 +108,11 @@ export function serverSettings(env: ServerSettings): ServerSettings {
   return {
     MULTIX_MCP_MAX_OUTPUTS: env.MULTIX_MCP_MAX_OUTPUTS,
     MULTIX_MCP_MAX_VIDEO_SECONDS: env.MULTIX_MCP_MAX_VIDEO_SECONDS,
+    MULTIX_MCP_MAX_AUDIO_SECONDS: env.MULTIX_MCP_MAX_AUDIO_SECONDS,
     MULTIX_MCP_ALLOWED_RESOLUTIONS: env.MULTIX_MCP_ALLOWED_RESOLUTIONS,
+    MULTIX_MCP_ALLOWED_IMAGE_MODELS: env.MULTIX_MCP_ALLOWED_IMAGE_MODELS,
     MULTIX_MCP_ALLOWED_ORIGINS: env.MULTIX_MCP_ALLOWED_ORIGINS,
+    MULTIX_MCP_UNCAPPED_SPEND: env.MULTIX_MCP_UNCAPPED_SPEND,
   };
 }
 
@@ -108,6 +128,10 @@ const VIDEO_SECONDS_DEFAULT = 10;
 const VIDEO_SECONDS_CEILING = 15;
 /** Duration sent when the caller omits one, so a provider default can never exceed the cap. */
 const VIDEO_SECONDS_WHEN_OMITTED = 5;
+/** ElevenLabs' longest sound effect. */
+const AUDIO_SECONDS_DEFAULT = 30;
+/** Half of ElevenLabs Music's 10-minute maximum. */
+const AUDIO_SECONDS_CEILING = 300;
 /** 768p is a HeyGen Video resolution between 720p and 1080p. */
 const RESOLUTIONS_DEFAULT = ["480p", "720p", "768p", "1080p"];
 
@@ -129,8 +153,23 @@ export interface Limits {
   maxVideoSeconds: number;
   /** Duration used when the caller omits one: min(5, maxVideoSeconds). */
   defaultVideoSeconds: number;
+  /** Generated audio length in seconds (sound effects, music). */
+  maxAudioSeconds: number;
   /** Lower-case resolutions callers may request. */
   allowedResolutions: string[];
+  /** `<group>:<model>` entries image commands may use; empty means any model. */
+  allowedImageModels: string[];
+  /** What a run the caps cannot bound needs (see MULTIX_MCP_UNCAPPED_SPEND). */
+  uncappedSpend: UncappedSpendMode;
+}
+
+export type UncappedSpendMode = "budget" | "deny" | "allow";
+const UNCAPPED_SPEND_MODES: readonly UncappedSpendMode[] = ["budget", "deny", "allow"];
+
+/** An unknown value falls back to `budget`, so a typo never opens the guard. */
+function uncappedSpendMode(raw: string | undefined): UncappedSpendMode {
+  const mode = raw?.trim().toLowerCase();
+  return UNCAPPED_SPEND_MODES.find((m) => m === mode) ?? "budget";
 }
 
 export function limitsFrom(env: Env): Limits {
@@ -144,7 +183,14 @@ export function limitsFrom(env: Env): Limits {
     maxOutputs: boundedInt(env.MULTIX_MCP_MAX_OUTPUTS, OUTPUTS_DEFAULT, OUTPUTS_CEILING),
     maxVideoSeconds,
     defaultVideoSeconds: Math.min(VIDEO_SECONDS_WHEN_OMITTED, maxVideoSeconds),
+    maxAudioSeconds: boundedInt(
+      env.MULTIX_MCP_MAX_AUDIO_SECONDS,
+      AUDIO_SECONDS_DEFAULT,
+      AUDIO_SECONDS_CEILING,
+    ),
     allowedResolutions: resolutions.length > 0 ? resolutions : RESOLUTIONS_DEFAULT,
+    allowedImageModels: csv(env.MULTIX_MCP_ALLOWED_IMAGE_MODELS),
+    uncappedSpend: uncappedSpendMode(env.MULTIX_MCP_UNCAPPED_SPEND),
   };
 }
 

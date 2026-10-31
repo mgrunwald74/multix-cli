@@ -14,6 +14,7 @@ import {
   parseCostPolicy,
 } from "../../../src/budget/command-cost.js";
 import { TASKS } from "../../../src/capabilities/capability-types.js";
+import { CATALOG_VIEWS, OFFERING_SORTS } from "../../../src/catalog/catalog-query.js";
 import { BudgetError } from "../../../src/core/errors.js";
 import type { Limits } from "../config.js";
 import type { ProviderKeys } from "../provider-secret-names.js";
@@ -24,8 +25,10 @@ import {
   type JobToolsContext,
   MAX_WAIT_SECONDS,
 } from "./job-runner.js";
+import { modelCatalogPayload } from "./model-catalog-view.js";
 import { prepareRun } from "./run-argv-builder.js";
 import { MAX_INPUT_FILES } from "./run-input-files.js";
+import { assertSpendGuard } from "./run-option-caps.js";
 import { toolInput } from "./tool-input-schema.js";
 
 export type RunToolFn = (
@@ -78,6 +81,14 @@ export function costPreflight(
   return { estimate_only: true, command, estimate, ...(budget ? { budget } : {}) };
 }
 
+/** How multix_run treats a run the caps cannot bound (multix_catalog marks them `uncapped_spend`). */
+export const UNCAPPED_SPEND_NOTE: Record<Limits["uncappedSpend"], string> = {
+  budget:
+    "Runs the caps cannot bound (uncapped_spend in multix_catalog) need max_cost_usd and start only when their price is known and fits.",
+  deny: "Runs the caps cannot bound (uncapped_spend in multix_catalog) are refused.",
+  allow: "Runs the caps cannot bound (uncapped_spend in multix_catalog) are allowed.",
+};
+
 export function registerJobTools(
   server: McpServer,
   limits: Limits,
@@ -114,6 +125,53 @@ export function registerJobTools(
       ),
   );
 
+  server.registerTool(
+    "multix_model_catalog",
+    {
+      title: "multix model & provider catalogue",
+      description:
+        "Compare models and providers before running one. view providers: provider links and whether you saved keys. view models: offerings (provider + model) with tasks, the multix command and prices per configuration (resolution, audio), each with its source URL and check date. view show: one offering. view compare: quote every offering for one exact request (task, resolution, duration_s, audio, aspect_ratio, images); only list prices the source confirms for that configuration, with nothing assumed, are ranked; an estimate, an assumed setting (pass aspect_ratio) or audio left unstated while a ranked price covers it stays priced but unranked with reasons; the rest are not_comparable or unknown with the reason, never $0. Price says nothing about quality. Never returns key values.",
+      inputSchema: toolInput({
+        view: z.enum(CATALOG_VIEWS).describe("providers, models, show or compare"),
+        task: z.enum(TASKS).optional().describe("Task filter, e.g. video, image-to-video, speech"),
+        provider: z
+          .string()
+          .regex(/^[a-z0-9-]{1,40}$/)
+          .optional()
+          .describe("Provider group, e.g. fal, atlas"),
+        family: z
+          .string()
+          .regex(/^[a-z0-9.-]{1,60}$/)
+          .optional()
+          .describe("Model family, e.g. seedance-2.5"),
+        query: z.string().max(100).optional().describe("Text in the offering id, name or family"),
+        offering: z
+          .string()
+          .max(250)
+          .optional()
+          .describe("show: <provider>:<model>, e.g. fal:bytedance/seedance-2.5/text-to-video"),
+        priced: z.boolean().optional().describe("models: only offerings with a current price"),
+        ready: z.boolean().optional().describe("Only providers you saved keys for"),
+        resolution: z.string().max(20).optional().describe("480p, 720p, 1080p or 4k"),
+        duration_s: z.number().positive().max(3600).optional().describe("compare: video seconds"),
+        audio: z.boolean().optional().describe("Generated audio on or off"),
+        aspect_ratio: z.string().max(10).optional().describe("compare: e.g. 16:9"),
+        images: z.number().int().positive().max(100).optional().describe("compare: images"),
+        sort: z
+          .enum(OFFERING_SORTS as [string, ...string[]])
+          .optional()
+          .describe("models: sort"),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) =>
+      runTool(
+        "multix_model_catalog",
+        { view: args.view, task: args.task, provider: args.provider, offering: args.offering },
+        async () => modelCatalogPayload(keys, args),
+      ),
+  );
+
   if (!jobs) return;
   const runner = new JobRunner(jobs);
 
@@ -121,7 +179,7 @@ export function registerJobTools(
     "multix_run",
     {
       title: "Run a multix CLI command",
-      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, resolutions ${limits.allowedResolutions.join("/")}.`,
+      description: `Run one multix CLI command in an isolated container with your saved keys. command: e.g. "gemini generate". options: by long name without dashes ({"prompt": "...", "num-images": 2, "no-webp": true}). args: positionals in order. inputs: https URLs for file options or positionals (downloaded for the CLI). Output files go to your R2 bucket (configure it in /dashboard) and come back as URLs. Waits up to wait_seconds (max ${MAX_WAIT_SECONDS}, container start included); if still running, poll multix_job_status. At most ${jobs.caps.perAccount} running jobs per account. Caps: ${limits.maxOutputs} outputs, ${limits.maxVideoSeconds} s video, ${limits.maxAudioSeconds} s audio, resolutions ${limits.allowedResolutions.join("/")}${limits.allowedImageModels.length ? `, image models ${limits.allowedImageModels.join(", ")}` : ""}. ${UNCAPPED_SPEND_NOTE[limits.uncappedSpend]}`,
       inputSchema: toolInput({
         command: z.string().min(1).max(100).describe("Command path from multix_catalog"),
         args: z.array(z.string()).max(20).optional(),
@@ -150,7 +208,15 @@ export function registerJobTools(
       const fields = { command: args.command.slice(0, 100) };
       return runTool("multix_run", fields, async () => {
         const prepared = prepareRun(args, limits);
-        const preflight = costPreflight(prepared.command, args);
+        // An estimate-only call starts nothing, so the guard does not apply to it.
+        if (!args.estimate) {
+          assertSpendGuard(prepared.command, prepared.uncappedSpend, limits, args.max_cost_usd);
+        }
+        // The estimate cannot see the uncapped part, so only a proven ceiling counts.
+        const preflight = costPreflight(
+          prepared.command,
+          prepared.uncappedSpend ? { ...args, cost_policy: "strict" } : args,
+        );
         if (preflight) return preflight;
         return runner.run(prepared, args.wait_seconds ?? DEFAULT_WAIT_SECONDS);
       });

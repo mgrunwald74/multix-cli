@@ -33,14 +33,18 @@ const { providers } = t;
           <ul class="mx-provider-tags">
             {provider.modalities.map((modality) => <li>{providers.modalities[modality]}</li>)}
           </ul>
-          <h4 class="mx-provider-label">{providers.modelsLabel}</h4>
-          <ul class="mx-provider-models">
-            {provider.models.map((model) => (
-              <li>
-                <code>{model}</code>
-              </li>
-            ))}
-          </ul>
+          {provider.models.length > 0 && (
+            <>
+              <h4 class="mx-provider-label">{providers.modelsLabel}</h4>
+              <ul class="mx-provider-models">
+                {provider.models.map((model) => (
+                  <li>
+                    <code>{model}</code>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           <a class="mx-card-link" href={localePath(lang, provider.href)}>
             {providers.cta}
             <span class="mx-sr">: {provider.name}</span> <span aria-hidden="true">→</span>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCliCatalog } from "../scripts/cli-catalog-builder.js";
+import { catalogPayload } from "../src/jobs/catalog-view.js";
 import { CLI_CATALOG, CatalogIndex, isRepeatable, optionName } from "../src/jobs/cli-catalog.js";
 import {
   COMMAND_POLICIES,
@@ -31,10 +32,14 @@ describe("CLI catalog", () => {
         ...Object.keys(policy.forced ?? {}),
         ...(policy.unsupported ?? []),
         ...(policy.nameOptions ?? []),
+        ...(policy.promptFlagOptions ?? []),
+        ...Object.keys(policy.allowedValues ?? {}),
         ...(policy.repeatable ?? []),
         ...(policy.caps?.count ?? []),
         ...(policy.caps?.duration ?? []),
         ...(policy.caps?.resolution ?? []),
+        ...(policy.uncappedOptions ?? []),
+        ...(policy.priceOptions ?? []),
       ];
       for (const name of named) expect(options.has(name), `${path} --${name}`).toBe(true);
       for (const name of policy.filePositionals ?? []) {
@@ -69,7 +74,9 @@ describe("CLI catalog", () => {
     const fileish = /\b(?:file|files|path|paths|dir|directory|folder|filename|prefix|local)\b/i;
     const notPaths = new Set([
       "<json>", // inline JSON; a leading @ (read a file) is rejected for every value
+      "<json|@file>", // same as <json>
       "<id>", // provider-side IDs (e.g. a HeyGen destination folder)
+      "<fileId>", // a file already uploaded to the provider (TopView)
       "<str>", // plain text (e.g. align --text "... or pass --text-file")
       "<MB>", // a size
     ]);
@@ -115,5 +122,21 @@ describe("CLI catalog", () => {
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it("marks price options in the group view, by whether the option has a default", () => {
+    const view = catalogPayload({}, "openai") as {
+      commands: { command: string; options: { name: string; uncapped_spend?: string }[] }[];
+    };
+    const generate = view.commands.find((c) => c.command === "openai generate");
+    const quality = generate?.options.find((o) => o.name === "quality");
+    expect(quality?.uncapped_spend).toBe(
+      "a value other than the default sets the price of each output",
+    );
+    const gemini = catalogPayload({}, "gemini") as typeof view;
+    const size = gemini.commands
+      .find((c) => c.command === "gemini generate")
+      ?.options.find((o) => o.name === "size");
+    expect(size?.uncapped_spend).toBe("when given, this option sets the price of each output");
   });
 });
