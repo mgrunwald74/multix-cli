@@ -226,6 +226,17 @@ viết thường (`kling-2.6`, `hailuo-2_3`, `seedance-2.0` và các model khác
 `KLING2_1`, ...) tự chọn độ dài, tối đa 10 giây với Kling 2.1 và 2.5. Vì vậy
 server từ chối lệnh này khi `MULTIX_MCP_MAX_VIDEO_SECONDS` nhỏ hơn 10.
 
+**BytePlus Seedance.** `byteplus video`, `byteplus image-to-video` và
+`byteplus reference-to-video` gửi `--resolution`, `--duration` và
+`--aspect-ratio` tới BytePlus dưới dạng các token `--rs`, `--dur` và `--rt`
+nằm trong nội dung prompt, nơi BytePlus đọc chúng như tham số của model. Để
+prompt không thể ghi đè các giá trị đã bị giới hạn, server từ chối giá trị
+`--prompt`, `--negative` hoặc `--aspect-ratio` có chứa `--` theo sau là một chữ
+cái (chẳng hạn `--dur 12`); hãy đặt độ dài và độ phân giải bằng chính các
+option của lệnh. `byteplus generate-3d` gửi tới cùng endpoint task và nối
+`--flags` nguyên văn vào prompt, nên chỉ nhận các model 3D cho `--model`
+(`hyper3d-gen2-260112`, `hitem3d-2-0-251223`).
+
 **Runway.** `runway video` và `runway image` chạy được từ xa; truyền `--image`
 và từng `--reference` dưới dạng URL `https://` trong `inputs`, còn `--duration`
 bị giới hạn bởi `MULTIX_MCP_MAX_VIDEO_SECONDS`. Prompt không được bắt đầu bằng

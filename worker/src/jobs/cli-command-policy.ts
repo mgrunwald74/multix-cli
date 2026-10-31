@@ -16,6 +16,7 @@
  * Option names are long flags without the leading `--`.
  */
 
+import { BYTEPLUS_3D_MODELS } from "../../../src/providers/byteplus/models.js";
 import type { ProviderSecretName } from "../provider-secret-names.js";
 
 /** `file`: one or more downloaded files (repeatable when the CLI option is). `dir`: a directory of them. */
@@ -85,6 +86,15 @@ export interface CommandPolicy {
    * language code): letters, digits, `_` and `-` only, so it cannot add a path.
    */
   nameOptions?: string[];
+  /**
+   * Options the CLI writes into the prompt text, where the provider reads
+   * `--name value` tokens as model parameters (BytePlus Seedance's default
+   * encoding). A value with such a token is refused, so it cannot override a
+   * capped duration or resolution.
+   */
+  promptFlagOptions?: string[];
+  /** Options whose value must be one of the listed ones (e.g. models the caps were written for). */
+  allowedValues?: Record<string, readonly string[]>;
   /** Options the CLI collects when repeated but the catalog cannot tell (custom parser, no array default). */
   repeatable?: string[];
   caps?: CapRules;
@@ -159,6 +169,8 @@ export const OUTPUT_FILE_OPTION = "output";
 export const OUTPUT_DIR_OPTION = "output-dir";
 
 const VIDEO_CAPS: CapRules = { duration: ["duration"], resolution: ["resolution"] };
+/** Seedance puts these into the prompt text with `--rs`, `--dur`, `--rt` … appended. */
+const SEEDANCE_PROMPT_FLAGS = ["prompt", "negative", "aspect-ratio"];
 const OMNI_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, fillResolution: true };
 /** The resolution values are model-dependent, so none can be filled in: an omitted one is uncapped. */
 const MODEL_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, resolutionFromModel: true };
@@ -282,18 +294,26 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     caps: IMAGE_COUNT,
     priceOptions: IMAGE_SIZE,
   },
-  "byteplus video": { caps: VIDEO_CAPS },
+  "byteplus video": { caps: VIDEO_CAPS, promptFlagOptions: SEEDANCE_PROMPT_FLAGS },
   "byteplus image-to-video": {
     filePositionals: ["image"],
     fileOptions: { "last-frame": "file" },
     caps: VIDEO_CAPS,
+    promptFlagOptions: SEEDANCE_PROMPT_FLAGS,
   },
   "byteplus reference-to-video": {
     fileOptions: { "ref-image": "file", "ref-video": "file", "ref-audio": "file" },
     caps: VIDEO_CAPS,
+    promptFlagOptions: SEEDANCE_PROMPT_FLAGS,
   },
-  // --flags appends raw model flags (`--resolution 1536pro`, `--hd_texture true`) to the prompt.
-  "byteplus generate-3d": { fileOptions: { "input-image": "file" }, uncappedOptions: ["flags"] },
+  "byteplus generate-3d": {
+    fileOptions: { "input-image": "file" },
+    // The 3D models only: the same tasks endpoint runs Seedance, and --flags
+    // goes into the prompt raw, so any other model could make an uncapped video.
+    allowedValues: { model: BYTEPLUS_3D_MODELS.map((m) => m.id) },
+    // --flags appends raw model flags (`--resolution 1536pro`, `--hd_texture true`) to the prompt.
+    uncappedOptions: ["flags"],
+  },
   "cloudflare generate-video": { caps: VIDEO_CAPS },
   "elevenlabs clone": { fileOptions: { files: "file", audio: "file" } },
   "elevenlabs voice-changer": { fileOptions: { input: "file" } },

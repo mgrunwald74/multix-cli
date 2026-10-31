@@ -60,6 +60,8 @@ const OUTPUT_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const ASSET_REF_RE = /^asset:[A-Za-z0-9_-]{1,128}$/;
 /** Values the CLI turns into part of a file name (see CommandPolicy.nameOptions). */
 export const NAME_PART_RE = /^[A-Za-z0-9_-]{1,64}$/;
+/** A model-parameter token such as `--dur` (see CommandPolicy.promptFlagOptions). */
+const PROMPT_FLAG_RE = /--[a-z]/i;
 
 const defaultIndex = new CatalogIndex();
 
@@ -158,6 +160,7 @@ export function prepareRun(
   const assetRefs = new Set(policy.assetRefOptions ?? []);
   const urlOptions = new Set(policy.urlOptions ?? []);
   const nameOptions = new Set(policy.nameOptions ?? []);
+  const promptFlagOptions = new Set(policy.promptFlagOptions ?? []);
   for (const [rawName, raw] of Object.entries(request.options ?? {})) {
     const name = rawName.replace(/^-+/, "");
     const option = OPTION_NAME_RE.test(name) ? options.get(name) : undefined;
@@ -177,6 +180,19 @@ export function prepareRun(
     if (value === null) continue;
     if (nameOptions.has(name) && value !== true && !value.every((v) => NAME_PART_RE.test(v))) {
       throw new ValidationError(`--${name} may contain only letters, digits, _ and - (at most 64)`);
+    }
+    const allowed = policy.allowedValues?.[name];
+    if (allowed && value !== true && !value.every((v) => allowed.includes(v))) {
+      throw new ValidationError(`--${name} must be one of ${allowed.join(", ")} on this server`);
+    }
+    if (
+      promptFlagOptions.has(name) &&
+      value !== true &&
+      value.some((v) => PROMPT_FLAG_RE.test(v))
+    ) {
+      throw new ValidationError(
+        `--${name} may not contain "--" followed by a letter: the provider reads such text as a model parameter (e.g. --dur), so use the command's own options`,
+      );
     }
     if (targets.has(name)) {
       const refs = value === true ? [] : value;

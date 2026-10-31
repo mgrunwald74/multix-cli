@@ -228,6 +228,17 @@ listed by `leonardo video-models`) for 8 seconds, and the upper-case models
 for Kling 2.1 and 2.5. The server therefore refuses it when
 `MULTIX_MCP_MAX_VIDEO_SECONDS` is below 10.
 
+**BytePlus Seedance.** `byteplus video`, `byteplus image-to-video` and
+`byteplus reference-to-video` send `--resolution`, `--duration` and
+`--aspect-ratio` to BytePlus as `--rs`, `--dur` and `--rt` tokens inside the
+prompt text, where BytePlus reads them as model parameters. So that a prompt
+cannot override the capped values, the server refuses a `--prompt`,
+`--negative` or `--aspect-ratio` value that contains `--` followed by a letter
+(such as `--dur 12`); set the length and resolution with the command's own
+options instead. `byteplus generate-3d`, which posts to the same task
+endpoint and appends `--flags` to the prompt as given, accepts only the 3D
+models as `--model` (`hyper3d-gen2-260112`, `hitem3d-2-0-251223`).
+
 **Runway.** `runway video` and `runway image` can run remotely; give
 `--image` and each `--reference` as `https://` URLs in `inputs`, and
 `--duration` is capped by `MULTIX_MCP_MAX_VIDEO_SECONDS`. A prompt must not
