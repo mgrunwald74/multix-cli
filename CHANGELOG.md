@@ -5,21 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.22.0-beta.3](https://github.com/mrgoonie/multix-cli/compare/v1.22.0-beta.2...v1.22.0-beta.3) (2026-10-28)
+## [1.24.0](https://github.com/mrgoonie/multix-cli/compare/v1.23.0...v1.24.0) (2026-10-28)
 
 
 ### Added
 
-* **catalog:** model and provider catalogue with configuration-aware prices, usage, reviews and recommendations ([#422](https://github.com/mrgoonie/multix-cli/issues/422)) ([8c6b8e3](https://github.com/mrgoonie/multix-cli/commit/8c6b8e3a3aee68225ef7e16817a5fdb85fe0e947)), closes [#414](https://github.com/mrgoonie/multix-cli/issues/414)
-* **skills:** MCP Skills Extension, versioned skills registry and task skills ([#420](https://github.com/mrgoonie/multix-cli/issues/420)) ([cd1cc5a](https://github.com/mrgoonie/multix-cli/commit/cd1cc5a1661972d8cc04a7ed64073142bcdeb73e)), closes [#415](https://github.com/mrgoonie/multix-cli/issues/415)
+* **site:** obsidian redesign of the site and MCP dashboard ([#412](https://github.com/mrgoonie/multix-cli/issues/412)) ([3c1f85d](https://github.com/mrgoonie/multix-cli/commit/3c1f85d89845d49c6eec9b8286c39928e2603884))
 
-
-### Fixed
-
-* **gemini:** default image generation to the GA gemini-3.1-flash-image ([#423](https://github.com/mrgoonie/multix-cli/issues/423)) ([54d75de](https://github.com/mrgoonie/multix-cli/commit/54d75def77fc32e201fad0176d68f0d9914b3c20)), closes [#419](https://github.com/mrgoonie/multix-cli/issues/419)
-* **media:** refuse a URL in media verify before checking for ffmpeg ([#409](https://github.com/mrgoonie/multix-cli/issues/409)) ([7e9289f](https://github.com/mrgoonie/multix-cli/commit/7e9289f3bc3ae545373e4fd24372eb22e8013a37)), closes [#408](https://github.com/mrgoonie/multix-cli/issues/408)
-
-## [1.22.0-beta.2](https://github.com/mrgoonie/multix-cli/compare/v1.22.0-beta.1...v1.22.0-beta.2) (2026-10-28)
+## [1.23.0](https://github.com/mrgoonie/multix-cli/compare/v1.22.0...v1.23.0) (2026-10-28)
 
 
 ### Added
@@ -40,22 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **media:** a second signal no longer reports a clean CANCELLED after skipping cleanup ([#390](https://github.com/mrgoonie/multix-cli/issues/390)) ([69cc2ee](https://github.com/mrgoonie/multix-cli/commit/69cc2ee649a1d64c05208d5ec465273da76a3fba)), closes [#385](https://github.com/mrgoonie/multix-cli/issues/385)
 * **media:** fail media verify on a WAV cut short of its declared data size ([#380](https://github.com/mrgoonie/multix-cli/issues/380)) ([6c1b8e9](https://github.com/mrgoonie/multix-cli/commit/6c1b8e90d9f17d96f981a60e279d6b7dd5f8d1fc)), closes [#374](https://github.com/mrgoonie/multix-cli/issues/374)
 * **media:** pass piped WAVs and cover a cut WAV by its declared duration ([#382](https://github.com/mrgoonie/multix-cli/issues/382)) ([67b5273](https://github.com/mrgoonie/multix-cli/commit/67b5273eca07493516341c9f32cfd5cefdc81367))
+* **media:** refuse a URL in media verify before checking for ffmpeg ([#409](https://github.com/mrgoonie/multix-cli/issues/409)) ([7e9289f](https://github.com/mrgoonie/multix-cli/commit/7e9289f3bc3ae545373e4fd24372eb22e8013a37)), closes [#408](https://github.com/mrgoonie/multix-cli/issues/408)
 * **media:** report the verify engine of a receipt in check-receipt ([#387](https://github.com/mrgoonie/multix-cli/issues/387)) ([ba94ac9](https://github.com/mrgoonie/multix-cli/commit/ba94ac995c91d54635aca7e7cde0e9fbe0cb1044)), closes [#381](https://github.com/mrgoonie/multix-cli/issues/381)
 
-## [1.22.0-beta.1](https://github.com/mrgoonie/multix-cli/compare/v1.22.0-beta...v1.22.0-beta.1) (2026-10-27)
-
-
-### Added
-
-* **fish:** add native Fish Audio TTS with Drama 3, multi-speaker and dictionaries ([c955217](https://github.com/mrgoonie/multix-cli/commit/c9552173963d5bcef83c19ae17db5bb1124809f4)), closes [#357](https://github.com/mrgoonie/multix-cli/issues/357)
-* **fish:** add voice design, voice cloning and voice deletion ([#360](https://github.com/mrgoonie/multix-cli/issues/360)) ([c3cc2fb](https://github.com/mrgoonie/multix-cli/commit/c3cc2fbe13d7e61c116704eab2c36f8b19635035))
-
-
-### Fixed
-
-* **openrouter:** price Fish Audio TTS models per UTF-8 byte ([6a96c42](https://github.com/mrgoonie/multix-cli/commit/6a96c427f36d5adaa5b4262637571311bdf969e0)), closes [#357](https://github.com/mrgoonie/multix-cli/issues/357)
-
-## [1.22.0-beta](https://github.com/mrgoonie/multix-cli/compare/v1.21.1...v1.22.0-beta) (2026-10-26)
+## [1.22.0](https://github.com/mrgoonie/multix-cli/compare/v1.21.1...v1.22.0) (2026-10-27)
 
 
 ### Added
@@ -63,12 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **budget:** price speech generate on its gemini and elevenlabs routes ([764f2fa](https://github.com/mrgoonie/multix-cli/commit/764f2fa3e7f26312f56979449affb7f10c07d530))
 * **budget:** price speech generate on its gemini and elevenlabs routes ([0bbd998](https://github.com/mrgoonie/multix-cli/commit/0bbd9983c0c717a04363475c92d8c0a4ca5930c4)), closes [#344](https://github.com/mrgoonie/multix-cli/issues/344)
 * **budget:** price speech generate on its gemini and elevenlabs routes ([#355](https://github.com/mrgoonie/multix-cli/issues/355)) ([764f2fa](https://github.com/mrgoonie/multix-cli/commit/764f2fa3e7f26312f56979449affb7f10c07d530))
+* **fish:** add native Fish Audio TTS with Drama 3, multi-speaker and dictionaries ([c955217](https://github.com/mrgoonie/multix-cli/commit/c9552173963d5bcef83c19ae17db5bb1124809f4)), closes [#357](https://github.com/mrgoonie/multix-cli/issues/357)
+* **fish:** add voice design, voice cloning and voice deletion ([#360](https://github.com/mrgoonie/multix-cli/issues/360)) ([c3cc2fb](https://github.com/mrgoonie/multix-cli/commit/c3cc2fbe13d7e61c116704eab2c36f8b19635035))
 
 
 ### Fixed
 
 * **agent:** do not drop spend keys like *_credits_used as balances ([#343](https://github.com/mrgoonie/multix-cli/issues/343)) ([da269f5](https://github.com/mrgoonie/multix-cli/commit/da269f57a80114caf88bfeb0479fd18d6166d780))
 * **budget:** speak the priced --text-file and bound fallback ranges per route ([1c95848](https://github.com/mrgoonie/multix-cli/commit/1c958480a51d4ac9c4f4db84da92a94e8450eab6)), closes [#344](https://github.com/mrgoonie/multix-cli/issues/344)
+* **openrouter:** price Fish Audio TTS models per UTF-8 byte ([6a96c42](https://github.com/mrgoonie/multix-cli/commit/6a96c427f36d5adaa5b4262637571311bdf969e0)), closes [#357](https://github.com/mrgoonie/multix-cli/issues/357)
 * **scene:** give bare punctuation and tags words to go with when splitting ([d6e8d86](https://github.com/mrgoonie/multix-cli/commit/d6e8d86e61103f96d87cd2ff3673ca72855ebac5)), closes [#347](https://github.com/mrgoonie/multix-cli/issues/347)
 * **scene:** keep tags with spoken text in unspaced lines and join bare parts ([3977bac](https://github.com/mrgoonie/multix-cli/commit/3977bace972480605a536c83d9cc50b8ee822158)), closes [#347](https://github.com/mrgoonie/multix-cli/issues/347)
 * **scene:** move the last spoken word, not a trailing "?" or tag, into a bare part ([f60c46c](https://github.com/mrgoonie/multix-cli/commit/f60c46c4a49cc53d25dd1aecdf7bff178704da36))
