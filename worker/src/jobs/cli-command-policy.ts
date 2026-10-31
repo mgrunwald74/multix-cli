@@ -10,7 +10,8 @@
  *   directory (MULTIX_OUTPUT_DIR) and are uploaded from there.
  * - Caps reuse the operator limits of the Worker tools (MULTIX_MCP_*).
  *   A run the caps cannot bound is marked (`uncappedSpend`, `uncappedOptions`,
- *   `countFromModel`, `resolutionFromModel`) and goes through MULTIX_MCP_UNCAPPED_SPEND instead.
+ *   `priceOptions`, `countFromModel`, `resolutionFromModel`) and goes through
+ *   MULTIX_MCP_UNCAPPED_SPEND instead.
  *
  * Option names are long flags without the leading `--`.
  */
@@ -96,6 +97,14 @@ export interface CommandPolicy {
   /** Options that make a run uncapped when given (a raw request body or raw model flags). */
   uncappedOptions?: string[];
   /**
+   * Options that set the price of each output (image size, quality or
+   * resolution tier, upscale factor, a dearer mode flag), which no operator
+   * cap bounds. A value other than the catalog default makes the run
+   * uncapped; omitting the option leaves the CLI or model default, which
+   * stays allowed.
+   */
+  priceOptions?: string[];
+  /**
    * The job gets the keys of the provider groups these options name (the part
    * of each value before the first `:`) instead of the command group's keys.
    * The first option is required; an empty list gives the job no keys.
@@ -156,6 +165,10 @@ const MODEL_VIDEO_CAPS: CapRules = { ...VIDEO_CAPS, resolutionFromModel: true };
 /** Veo leaves the Gemini API on 2026-10-22 and rejects --duration, which the caps always send. */
 const OMNI_MODEL = { model: "gemini-omni-1.1-flash" };
 const IMAGE_COUNT: CapRules = { count: ["num-images"] };
+const IMAGE_SIZE = ["size"];
+const OPENAI_IMAGE_PRICE = ["size", "quality"];
+const ATLAS_IMAGE_PRICE = ["size", "resolution"];
+const LEONARDO_IMAGE_SIZE = ["width", "height"];
 const MODEL_IMAGE_COUNT: CapRules = { ...IMAGE_COUNT, countFromModel: true };
 const PASS_THROUGH = "the request body is passed to the provider as given";
 const SOURCE_LENGTH = "billed by the length of the source media";
@@ -178,7 +191,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "gemini analyze": { fileOptions: { files: "file" } },
   "gemini transcribe": { fileOptions: { files: "file" } },
   "gemini extract": { fileOptions: { files: "file" } },
-  "gemini generate": { caps: IMAGE_COUNT },
+  "gemini generate": { caps: IMAGE_COUNT, priceOptions: IMAGE_SIZE },
   "gemini image-to-image": { fileOptions: { ref: "file" } },
   // Gemini Omni video only (Veo is forced out): when --duration or --resolution
   // is omitted an allowed server value is sent, so the operator caps hold.
@@ -217,12 +230,20 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "minimax image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
   "minimax generate-video": { urlOptions: ["first-frame"], caps: VIDEO_CAPS },
   // The Codex drivers need a local ChatGPT login; only the API driver runs remotely.
-  "openai generate": { forced: { driver: "api" }, caps: IMAGE_COUNT },
-  "openai image-to-image": { forced: { driver: "api" }, fileOptions: { ref: "file" } },
+  "openai generate": {
+    forced: { driver: "api" },
+    caps: IMAGE_COUNT,
+    priceOptions: OPENAI_IMAGE_PRICE,
+  },
+  "openai image-to-image": {
+    forced: { driver: "api" },
+    fileOptions: { ref: "file" },
+    priceOptions: OPENAI_IMAGE_PRICE,
+  },
   "openai transcribe": {
     fileOptions: { input: "file", "known-speaker-reference": "file" },
   },
-  "openrouter generate": { caps: IMAGE_COUNT },
+  "openrouter generate": { caps: IMAGE_COUNT, priceOptions: ["image-size"] },
   "openrouter image-to-image": { fileOptions: { ref: "file" } },
   "openrouter image-to-video": {
     urlOptions: ["image-url", "last-frame-url"],
@@ -240,14 +261,27 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   },
   "fish voice-design": { caps: { count: ["count"] } },
   "fish clone": { fileOptions: { sample: "file", "transcript-file": "file" } },
-  "leonardo generate": { caps: { count: ["num"] } },
-  "leonardo image-to-image": { caps: { count: ["num"] } },
+  "leonardo generate": {
+    caps: { count: ["num"] },
+    // --quality defaults to HIGH, the dearest tier, so it is not listed.
+    priceOptions: [...LEONARDO_IMAGE_SIZE, "alchemy", "ultra"],
+  },
+  "leonardo image-to-image": { caps: { count: ["num"] }, priceOptions: LEONARDO_IMAGE_SIZE },
+  "leonardo upscale": { priceOptions: ["multiplier"] },
   // No --duration: a v2 model gets duration: 8 and a v1 model picks its own length
   // (Leonardo documents Kling 2.1 and 2.5 at 5 or 10 s), so a run can reach 10 s.
   "leonardo video": { caps: { resolution: ["resolution"], fixedSeconds: 10 } },
   "leonardo image-to-video": { caps: VIDEO_CAPS },
-  "byteplus generate": { fileOptions: { "input-image": "file" }, caps: IMAGE_COUNT },
-  "byteplus image-to-image": { fileOptions: { ref: "file" }, caps: IMAGE_COUNT },
+  "byteplus generate": {
+    fileOptions: { "input-image": "file" },
+    caps: IMAGE_COUNT,
+    priceOptions: IMAGE_SIZE,
+  },
+  "byteplus image-to-image": {
+    fileOptions: { ref: "file" },
+    caps: IMAGE_COUNT,
+    priceOptions: IMAGE_SIZE,
+  },
   "byteplus video": { caps: VIDEO_CAPS },
   "byteplus image-to-video": {
     filePositionals: ["image"],
@@ -298,7 +332,7 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   // a local path; neither is expressible remotely (pass URLs in --input).
   "fal run": { unsupported: ["file", "receipt"], uncappedSpend: PASS_THROUGH },
   "fal upload": { filePositionals: ["file"] },
-  "fal image": { caps: IMAGE_COUNT },
+  "fal image": { caps: IMAGE_COUNT, priceOptions: ["image-size"] },
   "fal video": {
     uncappedSpend: "the model picks the resolution (fal video has no --resolution)",
     urlOptions: ["image-url"],
@@ -314,8 +348,12 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
     uncappedOptions: ["input", "text-field"],
   },
   // An omitted --num-images leaves the count to the model's schema default.
-  "atlas image": { caps: MODEL_IMAGE_COUNT },
-  "atlas image-to-image": { fileOptions: { ref: "file" }, caps: MODEL_IMAGE_COUNT },
+  "atlas image": { caps: MODEL_IMAGE_COUNT, priceOptions: ATLAS_IMAGE_PRICE },
+  "atlas image-to-image": {
+    fileOptions: { ref: "file" },
+    caps: MODEL_IMAGE_COUNT,
+    priceOptions: ATLAS_IMAGE_PRICE,
+  },
   "atlas video": { caps: MODEL_VIDEO_CAPS },
   "atlas image-to-video": { fileOptions: { ref: "file" }, caps: MODEL_VIDEO_CAPS },
   "atlas audio": { fileOptions: { audio: "file" } },
@@ -339,6 +377,8 @@ export const COMMAND_POLICIES: Readonly<Record<string, CommandPolicy>> = {
   "runway image": {
     fileOptions: { reference: "file" },
     repeatable: ["reference", "reference-tag"],
+    // 1080p-tier ratios cost more than the 1280:720 default.
+    priceOptions: ["ratio"],
   },
   "heygen video-agent": {
     uncappedSpend: "the agent decides the video length",

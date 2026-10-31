@@ -172,16 +172,31 @@ export function assertAllowedImageModel(
 /**
  * Why the caps cannot bound this run, or undefined when they do: the command
  * is marked uncapped, the caller used an option that merges a raw request
- * body, or the model picks the number of outputs or the resolution.
+ * body, changed an option that sets the price of each output, or the model
+ * picks the number of outputs or the resolution.
  */
 export function uncappedReason(
   policy: CommandPolicy,
+  options: ReadonlyMap<string, CliOption>,
   values: OptionValues,
   limits: Limits,
 ): string | undefined {
   if (policy.uncappedSpend) return policy.uncappedSpend;
   const merged = policy.uncappedOptions?.find((name) => values.has(name));
   if (merged) return `with --${merged}, the server caps do not bound the request`;
+  const priced = policy.priceOptions?.find((name) => {
+    const value = values.get(name);
+    if (value === undefined) return false;
+    if (value === true) return true;
+    const given = value[0]?.trim() ?? "";
+    const fallback = defaultString(options.get(name));
+    if (fallback === undefined) return true;
+    const [n, d] = [Number(given), Number(fallback)];
+    return Number.isFinite(n) && Number.isFinite(d) && given !== "" ? n !== d : given !== fallback;
+  });
+  if (priced) {
+    return `--${priced} sets the price of each output, which this server's caps do not bound (omit it to use the default)`;
+  }
   if (policy.caps?.countFromModel) {
     const omitted = policy.caps.count?.find((name) => !values.has(name));
     if (omitted) {

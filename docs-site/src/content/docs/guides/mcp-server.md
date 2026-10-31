@@ -174,7 +174,16 @@ the option that makes a run uncapped):
   where the model's default resolution applies. Passing one of
   `MULTIX_MCP_ALLOWED_RESOLUTIONS` makes the run capped again, for models that
   take a resolution (some Atlas models do not, and are then always uncapped).
-  For `openrouter image-to-video` the value is a request the model may round.
+  For `openrouter image-to-video` the value is a request the model may round;
+- options that set the price of each image, which no operator cap bounds:
+  `--size` of `gemini generate`, `byteplus generate` / `image-to-image`;
+  `--size` / `--quality` of `openai generate` / `image-to-image`; `--size` /
+  `--resolution` of `atlas image` / `image-to-image`; `--image-size` of
+  `openrouter generate` and `fal image`; `--width` / `--height` of `leonardo
+  generate` / `image-to-image`, `--alchemy` / `--ultra` of `leonardo
+  generate`, `--multiplier` of `leonardo upscale` and `--ratio` of `runway
+  image`. Omitting the option, or repeating the `default` that
+  `multix_catalog` lists for it, keeps the run capped.
 
 The operator decides what such a run needs with `MULTIX_MCP_UNCAPPED_SPEND`.
 In `budget` mode (the default) the call must give `max_cost_usd`, and the job

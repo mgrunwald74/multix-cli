@@ -173,7 +173,16 @@ hạn):
   giá trị trong `MULTIX_MCP_ALLOWED_RESOLUTIONS` giúp lần chạy được giới hạn
   trở lại, với model nhận độ phân giải (một số model Atlas không nhận, nên
   luôn không bị giới hạn). Với `openrouter image-to-video`, giá trị này là yêu
-  cầu mà model có thể làm tròn.
+  cầu mà model có thể làm tròn;
+- option quyết định giá mỗi ảnh mà không giới hạn nào của operator chặn được:
+  `--size` của `gemini generate`, `byteplus generate` / `image-to-image`;
+  `--size` / `--quality` của `openai generate` / `image-to-image`; `--size` /
+  `--resolution` của `atlas image` / `image-to-image`; `--image-size` của
+  `openrouter generate` và `fal image`; `--width` / `--height` của `leonardo
+  generate` / `image-to-image`, `--alchemy` / `--ultra` của `leonardo
+  generate`, `--multiplier` của `leonardo upscale` và `--ratio` của `runway
+  image`. Bỏ trống option, hoặc truyền đúng `default` mà `multix_catalog` liệt
+  kê cho option đó, thì lần chạy vẫn được giới hạn.
 
 Operator quyết định điều kiện cho các lần chạy này bằng
 `MULTIX_MCP_UNCAPPED_SPEND`. Ở chế độ `budget` (mặc định), lệnh gọi phải có
