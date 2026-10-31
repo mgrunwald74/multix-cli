@@ -68,6 +68,7 @@ import {
   DEFAULT_RUNWAY_VIDEO_MODEL,
   VIDEO_MODELS as RUNWAY_VIDEO_MODELS,
 } from "../../../../src/providers/runway/models.ts";
+import { PLATFORM_ROUTES as TOPVIEW_PLATFORM_ROUTES } from "../../../../src/providers/topview/models.ts";
 
 /** What a provider can produce or read, as shown on the page (labels live in landing-copy.ts). */
 export const PROVIDER_MODALITIES = [
@@ -124,6 +125,8 @@ function listed(list: Iterable<string>, id: string, source: string): string {
 
 const ids = (list: readonly { id: string }[]) => list.map((m) => m.id);
 const falRegistry = verifiedModels({ provider: "fal" }).map((m) => m.model);
+/** TopView API Platform model ids: each verified route without its mode (`bytedance/seedance-2.5`). */
+const topviewModels = TOPVIEW_PLATFORM_ROUTES.map((r) => r.route.split("/").slice(0, 2).join("/"));
 
 interface ProviderSource {
   /** CLI command group: `multix <group> ...`. */
@@ -140,6 +143,11 @@ interface ProviderSource {
    * the verified model registry, one per model family.
    */
   models: readonly string[];
+  /**
+   * The provider has no default or fixed model list in multix: every model
+   * comes from its live catalog (Sume), so no popular models are shown.
+   */
+  liveCatalog?: true;
 }
 
 const SOURCES: readonly ProviderSource[] = [
@@ -257,6 +265,23 @@ const SOURCES: readonly ProviderSource[] = [
     slug: "heygen",
     models: [HEYGEN_VIDEO_MODEL, listed(AVATAR_ENGINES, "avatar_iv", "AVATAR_ENGINES")],
   },
+  {
+    group: "sume",
+    name: "Sume",
+    slug: "sume",
+    models: [],
+    liveCatalog: true,
+  },
+  {
+    group: "topview",
+    name: "TopView",
+    slug: "topview",
+    models: [
+      listed(topviewModels, "topview/topview-t1", "TopView PLATFORM_ROUTES"),
+      listed(topviewModels, "bytedance/seedance-2.5", "TopView PLATFORM_ROUTES"),
+      listed(topviewModels, "openai/gpt-image-2", "TopView PLATFORM_ROUTES"),
+    ],
+  },
 ];
 
 export interface LandingProvider {
@@ -288,7 +313,11 @@ function buildProviders(): LandingProvider[] {
     if (source.group !== "cloudflare" && !keyNames.has(source.name)) {
       throw new Error(`landing providers: "${source.name}" is not a name in PROVIDER_KEYS`);
     }
-    if (source.models.length < 2 || source.models.length > 4) {
+    if (source.liveCatalog) {
+      if (source.models.length > 0) {
+        throw new Error(`landing providers: ${source.name} lists models from a live catalog`);
+      }
+    } else if (source.models.length < 2 || source.models.length > 4) {
       throw new Error(`landing providers: ${source.name} needs 2-4 popular models`);
     }
     const set = modalities.get(source.group) ?? new Set();
